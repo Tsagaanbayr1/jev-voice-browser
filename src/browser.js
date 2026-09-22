@@ -91,6 +91,15 @@ export class BrowserManager {
     return this.pages.map((p, i) => ({ index: i, url: p.url(), active: p === this.active }));
   }
 
+  /** Идэвхтэй хуудсын URL, эсвэл null (sync; үйлдэл юунд хүргэснийг бүртгэхэд хэрэглэнэ). */
+  currentUrl() {
+    try {
+      return this.active && !this.active.isClosed() ? this.active.url() : null;
+    } catch {
+      return null;
+    }
+  }
+
   /** Идэвхтэй хуудсыг snapshot хий (URL, title, compact element жагсаалт, search box, site). */
   async snapshot() {
     const page = await this.ensurePage();

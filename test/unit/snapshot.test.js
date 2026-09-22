@@ -35,7 +35,7 @@ test("compactElements: dedupes identical (role, text, href) and drops nameless n
   const out = compactElements(els);
   assert.deepEqual(
     out.map((e) => e.id),
-    ["e02", "e04"], // in-viewport (even ids) first, by position; e01 duplicates e02 (seen first); e03 nameless link removed
+    ["e02", "e04"], // эхлээд viewport доторх (тэгш id), байрлалаараа; e01 нь e02-той давхцана (эхэлж харагдсан); e03 нэргүй холбоос хасагдана
   );
 });
 

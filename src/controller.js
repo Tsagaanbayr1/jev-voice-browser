@@ -11,7 +11,7 @@
  * English, хөлдөөсөн — хэвээр үлддэг, учир нь энэ нь уншигчид биш, Jev-д өгөх input.
  */
 import { EventEmitter } from "node:events";
-import { DEBOUNCE_MS, SILENCE_COMPLETE_MS, CANDIDATE_TTL_MS, MAX_INFLIGHT, MODEL, T } from "./constants.js";
+import { DEBOUNCE_MS, SILENCE_COMPLETE_MS, CANDIDATE_TTL_MS, MAX_INFLIGHT, MAX_CONTEXT_ACTIONS, MODEL, T } from "./constants.js";
 import { decide, isAbortError } from "./jev.js";
 import { evaluatePolicy, describe } from "./policy.js";
 import { execute } from "./executor.js";
@@ -48,6 +48,9 @@ export class Controller extends EventEmitter {
     this.log = [];
     this.stats = { calls: 0, inputTokens: 0, costUsd: 0, latencies: [], actions: 0, model: MODEL, commandToActionMs: [], decisionMs: [] };
     this.history = [];
+    // Хүсэлт бүрт Jev рүү илгээх conversation context (jev.encodeContext-ыг үз):
+    // сүүлийн navigation-аас өмнөх хуудас болон сүүлд гүйцэтгэсэн цөөн үйлдэл.
+    this.context = { previousPage: null, recentActions: [] };
     browser.onChange(() => this.emit("tabs", browser.tabInfo()));
   }
 
@@ -196,6 +199,7 @@ export class Controller extends EventEmitter {
           pendingConfirmation: this.pending ? describe(this.pending) : null,
           tabs: this.browser.tabInfo(),
           lang: this.lang,
+          context: this.context,
         },
         { signal: ac.signal },
       );
@@ -232,6 +236,7 @@ export class Controller extends EventEmitter {
       isFinal: utt.final && !stale,
       pending: this.pending,
       lang: this.lang,
+      context: this.context,
     });
 
     const decision = {
@@ -314,6 +319,7 @@ export class Controller extends EventEmitter {
     this.busy = true;
     const t0 = Date.now();
     const utt = meta.utterance || this.utterance;
+    const pageBefore = this.snapshot ? { url: this.snapshot.url, title: this.snapshot.title, site: this.snapshot.site } : null;
     try {
       const res = await this._execute(action, this.browser, { uiLang: this.uiLang });
       const took = Date.now() - t0;
@@ -323,6 +329,7 @@ export class Controller extends EventEmitter {
       if (sinceLastWord != null) this.stats.commandToActionMs.push(sinceLastWord);
       if (meta.decision?.decisionLagMs != null) this.stats.decisionMs.push(meta.decision.decisionLagMs);
       this.history.push({ action, at: Date.now(), url: res.detail });
+      this._recordContext({ action, ok: res.ok, detail: res.detail, said: meta.decision?.transcript || utt?.actedText || "", pageBefore });
       const decisionMs = meta.decision?.decisionLagMs ?? null;
       const entry = {
         action,
@@ -351,6 +358,32 @@ export class Controller extends EventEmitter {
       this.busy = false;
       await this.refreshSnapshot().catch(() => {});
     }
+  }
+
+  /**
+   * Сая юу хийснийг санаж, дараагийн Jev request "үр дүн рүү буц", "нөгөө", "тэр биш"
+   * гэхийг шийдвэрлэх боломжтой болгоно. Гүйцэтгэсэн үйлдэл бүрийн дараа дуудагдана;
+   * page snapshot-ыг дуудагч тэр даруй шинэчилдэг тул `outcome` нь үйлдлийн дараах URL-аас гарна.
+   */
+  _recordContext({ action, ok, detail, said, pageBefore }) {
+    const after = this.browser.currentUrl?.() ?? null;
+    const navigated = pageBefore && after && after !== pageBefore.url;
+    if (navigated) this.context.previousPage = pageBefore;
+    let outcome = ok ? "done" : "failed";
+    if (ok && navigated) outcome = `navigated to ${after.replace(/^https?:\/\/(www\.)?/, "").slice(0, 80)}`;
+    else if (ok && typeof detail === "string" && detail && !detail.startsWith("http")) outcome = detail.slice(0, 80);
+    this.context.recentActions.push({
+      type: action.type,
+      targetId: action.targetId ?? null,
+      targetLabel: action.label ?? null,
+      text: action.text ?? null,
+      url: action.url ?? null,
+      said,
+      ok,
+      outcome,
+      at: Date.now(),
+    });
+    if (this.context.recentActions.length > MAX_CONTEXT_ACTIONS) this.context.recentActions.shift();
   }
 
   /** "Undo" = history-д буцах. */
@@ -415,6 +448,7 @@ export class Controller extends EventEmitter {
       lastDecision: this.lastDecision,
       // `action` нь English `summary`-ийн хажууд явж, хуудас "⚠ pending: …"-г өөрийн
       // хэлээр, дотор нь action-ыг оруулж, орчуулж render хийх боломжтой болно.
+      context: this.context,
       pending: this.pending ? { action: this.pending, summary: describe(this.pending) } : null,
       candidates: this.candidates?.list ?? null,
       log: this.log.slice(-60),

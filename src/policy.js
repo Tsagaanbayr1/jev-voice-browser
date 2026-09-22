@@ -93,14 +93,22 @@ function fillTemplate(tpl, q) {
  * @param {object} p.snapshot  одоогийн page snapshot (elements, searchBoxId, site, url)
  * @param {number} p.silentMs  transcript хамгийн сүүлд өөрчлөгдсөнөөс хойшхи ms
  * @param {boolean} p.isFinal  speech recognizer энэ utterance-ийг final гэж тэмдэглэсэн
+ * @param {object|null} p.context  conversation context (өмнөх хуудас + сүүлийн үйлдлүүд), correction-д хэрэглэнэ
  * @param {object|null} p.pending  "confirm"-ыг хүлээж буй pending destructive action
  * @param {boolean} p.confirmed  хэрэглэгч энэ action-д confirm-ыг аль хэдийн хэлсэн
  * @returns {{decision: string, action?: object, candidates?: Array, reasons: Array, summary: string, summaryKey?: {key: string, params: object}}}
  */
-export function evaluatePolicy({ answers, candidates, snapshot, silentMs = 0, isFinal = false, pending = null, lang = "en" }) {
+export function evaluatePolicy({ answers, candidates, snapshot, silentMs = 0, isFinal = false, pending = null, context = null, lang = "en" }) {
   const reasons = [];
   const intent = answers.intent;
   const intentName = intent?.choice ?? "none";
+  const lastAction = context?.recentActions?.length ? context.recentActions[context.recentActions.length - 1] : null;
+  const correction = answers.is_correction?.noul ?? 0;
+  // Засвар нь зөвхөн хэллэг дууссаны дараа (эсвэл хэрэглэгч чимээгүй болсны дараа) тооцогдоно:
+  // гүйлгэсний дараах "яв" гэх мэт нэг үгтэй хэсэгчилсэн хэллэг нь "гүйлгэлтийг буцаа" гэж
+  // уншигдах ёсгүй.
+  const finishedPhrase = (answers.complete?.noul ?? 0) >= T.complete || silentMs >= SILENCE_COMPLETE_MS || isFinal;
+  const isCorrection = Boolean(lastAction) && correction >= T.correction && finishedPhrase;
 
   // 0. Pending destructive action-д зориулсан confirm / cancel боловсруулалт.
   if (pending) {
@@ -114,7 +122,29 @@ export function evaluatePolicy({ answers, candidates, snapshot, silentMs = 0, is
     }
   }
 
-  // 1. Хэрэглэгч ер нь browser-тэй ярьж байна уу?
+  // 1. Өмнөх үйлдлийг засах ("тэр биш", "буруу холбоос, буцаа"). Энгийн "үгүй" бол
+  // браузер руу чиглэсэн хариу үйлдэл, шинэ imperative биш, тиймээс энэ нь is_command
+  // gate-ээс өмнө ажиллана. Хэрэглэгч сая болсныг үгүйсгээд шинэ target нэрлэхгүй бол
+  // буцаана; харин шинэ target нэрлэвэл ("үгүй, нөгөө") доош үргэлжлээд өмнөх
+  // target-ыг хаана.
+  if (isCorrection) {
+    check(reasons, "is_correction", correction, T.correction, true, { key: "note.is_correction", params: { action: actionRef(lastAction) } });
+    const confidentIntent = intentName !== "none" && (intent?.confidence ?? 0) >= T.intentConfidence;
+    // "нөгөө" нь шинэ element нэрлэнэ; "тэр биш" дангаараа нэрлэхгүй (target нь `none`
+    // эсвэл сая үйлдсэн element болж буцаж ирнэ) — сүүлийнх нь энгийн буцаалт.
+    const namesNewTarget =
+      TARGET_INTENTS.has(intentName) && topChoices(answers.target, 2).some((c) => c.id !== lastAction.targetId && c.p >= T.targetTopProb);
+    // Гүйлгэлт эсвэл даралтын дараа хэлсэн итгэлтэй closed-set команд ("буцах", "доош гүйлгэ",
+    // "ютуб нээ") бол хэлсэн зүйлээ, өмнөх үйлдлийг буцаах хүсэлт биш: хэвийн боловсруулалт
+    // руу үргэлжилнэ. Зөвхөн итгэлгүй / target-гүй засвар л "үүнийг буцаа" гэж үзэгдэнэ.
+    const reverse = lastAction.type !== "go_back" && (!confidentIntent || (TARGET_INTENTS.has(intentName) && !namesNewTarget));
+    if (reverse) {
+      const reversal = reverseAction(lastAction);
+      return { decision: "act", action: reversal, reasons, ...actionSum("summary.correction", reversal) };
+    }
+  }
+
+  // 1b. Хэрэглэгч ер нь browser-тэй ярьж байна уу?
   const isCmd = answers.is_command?.noul ?? 0;
   if (!check(reasons, "is_command", isCmd, T.isCommand, isCmd >= T.isCommand, { key: "note.is_command" })) {
     return { decision: "ignore", reasons, ...sum("summary.notCommand") };
@@ -165,7 +195,9 @@ export function evaluatePolicy({ answers, candidates, snapshot, silentMs = 0, is
   }
 
   // 4. Тодорхой action-ыг байгуулна (URL, template, текстийг код эзэмшинэ; Jev зөвхөн option сонгосон).
-  const built = buildAction({ intentName, answers, candidates, snapshot, reasons, lang });
+  // Шинэ target нэрлэсэн засварт өмнөх target нь option биш ("нөгөө").
+  const excludeTargetId = isCorrection && TARGET_INTENTS.has(intentName) ? lastAction.targetId ?? null : null;
+  const built = buildAction({ intentName, answers, candidates, snapshot, reasons, excludeTargetId, lang });
   if (built.decision !== "act") return { ...built, reasons };
   const action = built.action;
 
@@ -183,7 +215,41 @@ export function evaluatePolicy({ answers, candidates, snapshot, silentMs = 0, is
   return { decision: "act", action, reasons, ...actionSum("summary.act", action) };
 }
 
-function buildAction({ intentName, answers, candidates, snapshot, reasons, lang = "en" }) {
+/**
+ * `action`-ыг браузер чадах хэмжээнд буцаах үйлдэл: navigation/дарaлт → буцах;
+ * бичих → цэвэрлэх; таб → хаах/солих.
+ *
+ * Label бүр `label.*` key-тэй бөгөөд англи утга нь өмнөх шууд string-тэй ЯГ ижил,
+ * тиймээс `describe()` (model-ийн хардаг, хөлдөөсөн) өөрчлөгдөхгүй, харин page
+ * уншигчийн хэлээр render хийнэ.
+ */
+export function reverseAction(action) {
+  switch (action?.type) {
+    case "type_into_field":
+      return {
+        type: "type_into_field",
+        targetId: action.targetId,
+        text: "",
+        submit: false,
+        label: `clear ${action.label || action.targetId}`,
+        ...label("label.clearField", { target: action.label || action.targetId }),
+      };
+    case "open_new_tab":
+      return { type: "close_tab", ...label("label.closeNewTab") };
+    case "close_tab":
+      return { type: "go_back", ...label("label.backTabClosed") };
+    case "switch_tab":
+      return { type: "switch_tab", direction: action.direction === "previous" ? "next" : "previous", ...label("label.switchBack") };
+    case "scroll_down":
+      return { type: "scroll_up", amount: action.amount || "page", ...label("label.scrollBackUp") };
+    case "scroll_up":
+      return { type: "scroll_down", amount: action.amount || "page", ...label("label.scrollBackDown") };
+    default:
+      return { type: "go_back", ...label("label.undoAction", { target: actionRef(action) }) };
+  }
+}
+
+function buildAction({ intentName, answers, candidates, snapshot, reasons, excludeTargetId = null, lang = "en" }) {
   const site = answers.site?.choice ?? "none";
   // Монгол хэл "википедиа"-г mn.wikipedia.org руу илгээдэг; URL бүрийг код эзэмсээр байна.
   const SITE_HOME = sitesFor(lang).home;
@@ -246,10 +312,19 @@ function buildAction({ intentName, answers, candidates, snapshot, reasons, lang 
     case "select_option":
     case "type_into_field": {
       const target = answers.target;
-      const top = topChoices(target, T.candidateCount);
-      const chosen = target?.choice;
+      let top = topChoices(target, T.candidateCount + 1);
+      let chosen = target?.choice;
+      let chosenP = target?.probabilities?.[chosen] ?? 0;
+      if (excludeTargetId && chosen === excludeTargetId) {
+        // "үгүй, нөгөө": сая үйлдсэн element хасагдаж, дараагийнх нь авна.
+        top = top.filter((c) => c.id !== excludeTargetId);
+        chosen = top[0]?.id ?? "none";
+        chosenP = top[0]?.p ?? 0;
+        check(reasons, "exclude_target", excludeTargetId, "-", true, { key: "note.exclude_target", params: { target: chosen } });
+      }
+      top = top.slice(0, T.candidateCount);
       const targetOk =
-        chosen && chosen !== "none" && target.confidence >= T.targetConfidence && (target.probabilities?.[chosen] ?? 0) >= T.targetTopProb;
+        chosen && chosen !== "none" && target.confidence >= T.targetConfidence && chosenP >= T.targetTopProb;
       const text = intentName === "click_element" ? null : pickSpan(answers.text_span, T.spanConfidence, candidates.text?.[0]);
 
       if (intentName !== "click_element" && !text) {

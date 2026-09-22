@@ -85,6 +85,7 @@ async function main() {
   const browser = new BrowserManager();
   await browser.launch({ headless: HEADLESS, profileDir, startUrl: "about:blank" });
   const controller = new Controller({ browser });
+  if (process.env.VB_DEBUG) controller.on("log", (e) => console.error(`    [${e.level}] ${e.msg}`));
   await controller.start();
 
   console.log(`\nvoice-browser demo · model ${MODEL} · ${HEADLESS ? "headless" : "headed"} · ${WORD_MS}ms per spoken word\n`);

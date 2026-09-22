@@ -1,7 +1,7 @@
-# voice-browser — talk to a real browser, it acts before you finish the sentence
-
 > English version. The main [README.md](README.md) is in Mongolian — this is the same document,
 > kept as the upstream English original.
+
+# voice-browser — talk to a real browser, it acts before you finish the sentence
 
 A Node app that controls a **headed Chromium window** (Playwright) by voice. Speech is streamed
 word by word from the browser's Web Speech API to a small Node server; on every partial transcript
@@ -42,7 +42,7 @@ microphone, and speak. A separate Chromium window (the *controlled* browser) is 
 that is the one that acts. Keep the control page visible on a second screen / half the screen for
 the live probability bars.
 
-Options: `./run.sh --port 9000`, `--host 0.0.0.0` (LAN, see Security), `--start-url https://…`, `--lang mn` (spoken language), `--headless` (CI), or attach to a Chrome
+Options: `./run.sh --port 9000`, `--host 0.0.0.0` (LAN, see Security), `--start-url https://…`, `--headless` (CI), or attach to a Chrome
 you already have running instead of launching one:
 
 ```bash
@@ -61,45 +61,6 @@ into accounts there that you wouldn't want a mis-heard "click place order" to to
 clicks require a spoken "confirm", but treat that as a convenience, not a guarantee.
 
 No microphone? Type a command into the text box on the control page and press Enter.
-
-## Languages (English · Монгол)
-
-Pick the spoken language with the selector next to **Start mic**, or start the server with
-`./run.sh --lang mn` (or `VOICE_LANG=mn`). The selector does two things: it sets the speech
-recognizer's language, and it tells the server which language's examples to give Jev.
-
-Mongolian is supported end to end:
-
-| Say | What happens |
-| --- | --- |
-| "википедиа руу яв" | opens **mn**.wikipedia.org (per-language destinations) |
-| "Алан Туринг хай" | searches — note the payload comes *before* the verb |
-| "эхний холбоос дээр дар" / "хоёр" | clicks, or picks a numbered overlay by spoken number |
-| "хайлтын талбарт сайн байна уу гэж бич" | types "сайн байна уу" (destination is stated first) |
-| "доош гүйлгэ" · "буцах" · "шинэ таб нээ" | scroll · back · new tab |
-| "өнөөдөр цаг агаар сайхан байна" | ignored — chit-chat, not a command |
-
-Two things make this more than a translated string table (`src/lang.js`):
-
-- **Word order.** English puts the payload after the verb ("search for cats"); Mongolian puts it
-  before ("муур хай"), with any destination first ("хайлтын талбарт … гэж бич"). Candidate spans are
-  extracted by code, so the extractor handles both orders.
-- **Examples, not wording.** The questions stay in English — Jev judges a Mongolian `transcript`
-  correctly — but each intent carries examples in the spoken language. Measured on `jev-1.13.0`
-  with English-only examples: "буцах" scored `intent=none` and "Алан Туринг хай" scored
-  `is_command` 0.22, under the 0.5 gate, so both were silently ignored. With Mongolian examples the
-  same ten commands go from 6/10 to 9/10 acted on correctly (`test/integration/jev-mn.test.js`).
-
-A Cyrillic transcript is always parsed as Mongolian even if the selector says English, so a
-mis-set selector cannot silently break span extraction.
-
-**Dictation support is the browser's, not ours.** Chrome's Web Speech API hands audio to Google's
-speech service, and `mn-MN` is not guaranteed to be offered. If it is not, the recognizer raises
-`language-not-supported`; the control page then says so explicitly and points you at the text box,
-where typed Mongolian works exactly the same, because only dictation is missing.
-
-Adding a language is one object in `src/lang.js` (verbs, filler words, number words, spoken-domain
-words, site aliases, per-intent examples) plus an `<option>` in the control page.
 
 ## What you can say
 
@@ -123,10 +84,20 @@ Two commands in one breath work too: "go to example dot com and click the more i
 Every transcript update produces exactly one Jev request (`src/jev.js`). State:
 
 ```json
-{ "transcript": "click the first result",
-  "page": { "url": "...", "title": "...", "site": "duckduckgo" },
-  "elements": ["e02 combobox \"jev typesafe\" (placeholder: Search privately)", "e20 link \"TypeSafe — Jev\" → typesafe.ai", "..."] }
+{ "transcript": "open the documentation",
+  "page": { "url": "https://typesafe.ai/jev", "title": "Jev", "site": "generic" },
+  "elements": ["e03 link \"Documentation\" → docs.typesafe.ai", "e07 link \"Read the docs\" → docs.typesafe.ai", "..."],
+  "context": {
+    "previous_page": { "url": "https://duckduckgo.com/?q=jev+typesafe", "title": "jev typesafe at DuckDuckGo" },
+    "recent_actions": [
+      { "said": "click the first result", "action": "click_element", "target": "link \"TypeSafe — Jev\"", "outcome": "navigated to typesafe.ai/jev", "seconds_ago": 6 },
+      { "said": "search for jev typesafe", "action": "navigate_url", "outcome": "navigated to duckduckgo.com/?q=jev+typesafe", "seconds_ago": 25 } ] } }
 ```
+
+`context` is the conversation so far: the page you came from and the last three executed actions
+(what you said, what was done, what happened). It is what makes "go back to the results", "no, not
+that one", "the other one" and "open its documentation" resolvable — Jev has no memory between
+requests, so the memory lives in the state.
 
 Questions (all in `src/constants.js`, asked together, answered in parallel):
 
@@ -142,9 +113,14 @@ Questions (all in `src/constants.js`, asked together, answered in parallel):
 | `text_span` | Choice | verbatim candidate spans extracted by regex (+ `none`) — only when the transcript has any |
 | `url_span` | Choice | domain-looking spans (+ `none`) — only when present |
 | `tab_direction` | Choice | next · previous · first · none |
+| `is_correction` | Noul | is the user rejecting / redirecting the most recent action in `context.recent_actions`? — only asked when there is history |
 
 Policy (`src/policy.js`, thresholds `T` in `constants.js`), shown live in the UI as a gate table:
 
+0. `is_correction ≥ 0.6` on a finished phrase: with no confident new command ("no, not that one",
+   "undo that") → reverse the last action (click/navigate → back, typing → clear, scroll → opposite);
+   with a new target ("no, the other one") → the previously clicked element is excluded from the
+   candidates. A confident closed-set command ("go back" after a scroll) is never treated as a correction.
 1. `is_command ≥ 0.5` else **ignore**
 2. `intent.confidence ≥ 0.55` and not `none` else **wait**
 3. `complete ≥ 0.6`, or 900 ms of silence, or the recognizer's final result — else **wait**
@@ -173,8 +149,8 @@ src/overlay.js     injected highlight / toast / numbered badges
 src/controller.js  debounce, in-flight management, one action per utterance, chaining, stats
 src/server.js      Express + ws, serves src/public/index.html (control page)
 scripts/demo.js    word-by-word replay against real sites = end-to-end test
-test/unit/         spans, snapshot compaction, policy (mocked Jev), controller (mocked Jev + browser)
-test/integration/  27 real-API cases on captured page fixtures, prints pass rate + latency
+test/unit/         spans, snapshot compaction, policy (mocked Jev), controller (mocked Jev + browser), context encoding + corrections
+test/integration/  34 real-API cases on captured page fixtures (incl. context / correction), prints pass rate + latency
 ```
 
 ## Tests and demo
@@ -187,7 +163,7 @@ npm run demo:ci          # same, headless; exit code 1 on failure
 node scripts/demo.js --headless --only 1,2,3 --word-ms 250
 ```
 
-Latest measured (Sep 2026, from this machine): integration 27/27 (100%), Jev latency avg ≈ 330 ms
+Latest measured (Sep 2026, from this machine): integration 34/34 (100%, incl. 7 context/correction cases), Jev latency avg ≈ 330 ms
 (p50 ≈ 300 ms, 3–6k input tokens per request; the first request of a process is ~700 ms for the
 TLS handshake), last-word→decision ≈ 300 ms including the 200 ms debounce, whole demo ≈ $0.01.
 

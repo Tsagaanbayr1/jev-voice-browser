@@ -132,10 +132,20 @@ cp .env.example .env          # TypeSafe API түлхүүрээ буулгана
 Транскриптын шинэчлэл бүр яг нэг Jev хүсэлт үүсгэнэ (`src/jev.js`). Төлөв:
 
 ```json
-{ "transcript": "click the first result",
-  "page": { "url": "...", "title": "...", "site": "duckduckgo" },
-  "elements": ["e02 combobox \"jev typesafe\" (placeholder: Search privately)", "e20 link \"TypeSafe — Jev\" → typesafe.ai", "..."] }
+{ "transcript": "open the documentation",
+  "page": { "url": "https://typesafe.ai/jev", "title": "Jev", "site": "generic" },
+  "elements": ["e03 link \"Documentation\" → docs.typesafe.ai", "e07 link \"Read the docs\" → docs.typesafe.ai", "..."],
+  "context": {
+    "previous_page": { "url": "https://duckduckgo.com/?q=jev+typesafe", "title": "jev typesafe at DuckDuckGo" },
+    "recent_actions": [
+      { "said": "click the first result", "action": "click_element", "target": "link \"TypeSafe — Jev\"", "outcome": "navigated to typesafe.ai/jev", "seconds_ago": 6 },
+      { "said": "search for jev typesafe", "action": "navigate_url", "outcome": "navigated to duckduckgo.com/?q=jev+typesafe", "seconds_ago": 25 } ] } }
 ```
+
+`context` бол өнөөг хүртэлх яриа: та хаанаас ирсэн хуудас болон сүүлд гүйцэтгэсэн гурван үйлдэл
+(юу гэж хэлсэн, юу хийсэн, юу болсон). Энэ нь "үр дүн рүү буц", "тэр биш", "нөгөө",
+"түүний документацийг нээ" гэхийг шийдвэрлэх боломжтой болгодог — Jev хүсэлтүүдийн хооронд
+санах ойгүй тул санах ой нь state дотор амьдарна.
 
 Асуултууд (бүгд `src/constants.js` дотор; хамт тавигдаж, зэрэгцээ хариулагдана):
 
@@ -151,10 +161,16 @@ cp .env.example .env          # TypeSafe API түлхүүрээ буулгана
 | `text_span` | Choice | regex-ээр гаргаж авсан шууд нэрэмжит хэсгүүд (+ `none`) — зөвхөн транскриптэд байвал |
 | `url_span` | Choice | домэйн мэт хэсгүүд (+ `none`) — зөвхөн байвал |
 | `tab_direction` | Choice | next · previous · first · none |
+| `is_correction` | Noul | хэрэглэгч `context.recent_actions` дахь хамгийн сүүлийн үйлдлийг үгүйсгэж / өөр тийш чиглүүлж байна уу? — зөвхөн түүх байвал асууна |
 
 Бодлого (`src/policy.js`, босго нь `constants.js` доторх `T`), UI дээр gate хүснэгт болж шууд
 харагдана:
 
+0. Дууссан хэллэг дээр `is_correction ≥ 0.6`: итгэлтэй шинэ команд байхгүй бол ("тэр биш",
+   "үүнийг буцаа") → сүүлийн үйлдлийг буцаана (дарaлт/navigation → буцах, бичих → цэвэрлэх,
+   гүйлгэх → эсрэг чиглэл); шинэ target-тай бол ("үгүй, нөгөө") → өмнө нь дарсан элемент
+   candidate-уудаас хасагдана. Итгэлтэй closed-set команд (гүйлгэлтийн дараах "буцах")
+   хэзээ ч засвар гэж үзэгдэхгүй.
 1. `is_command ≥ 0.5` — үгүй бол **ignore**
 2. `intent.confidence ≥ 0.55` бөгөөд `none` биш — үгүй бол **wait**
 3. `complete ≥ 0.6`, эсвэл 900 мс чимээгүй байдал, эсвэл таних хөдөлгүүрийн эцсийн үр дүн —
@@ -189,8 +205,8 @@ src/server.js      Express + ws, src/public/index.html (удирдлагын х�
 src/public/        удирдлагын хуудас, микрофоны recorder, i18n хүснэгт
 src/lang.js        хэл тус бүрийн үйл үг, жишээ, сайтын өөр нэрс
 scripts/demo.js    жинхэнэ сайтууд руу үг үгээр тоглуулах = эхнээсээ дуустал тест
-test/unit/         spans, snapshot шахалт, policy (Jev mock), controller (Jev + хөтөч mock)
-test/integration/  хуудасны fixture дээр 27 жинхэнэ API кейс, гүйцэтгэл + хоцролт хэвлэнэ
+test/unit/         spans, snapshot шахалт, policy (Jev mock), controller (Jev + хөтөч mock), context encode + засвар
+test/integration/  хуудасны fixture дээр 34 жинхэнэ API кейс (context / засвар орсон), гүйцэтгэл + хоцролт хэвлэнэ
 ```
 
 ## Тест ба демо
@@ -203,10 +219,11 @@ npm run demo:ci          # мөнөөх, headless; алдаа гарвал exit 
 node scripts/demo.js --headless --only 1,2,3 --word-ms 250
 ```
 
-Хамгийн сүүлд хэмжсэн (2026 оны 9 сар, энэ машинаас): integration 27/27 (100%), Jev-ийн хоцролт
-дундаж ≈ 330 мс (p50 ≈ 300 мс, хүсэлт бүрт 3–6 мянган оролтын токен; процессын эхний хүсэлт
-TLS handshake-ийн улмаас ~700 мс), сүүлийн үг → шийдвэр ≈ 300 мс (200 мс debounce орсон),
-бүтэн демо ≈ $0.01.
+Хамгийн сүүлд хэмжсэн (2026 оны 9 сар, энэ машинаас): integration 34/34 (100%, context / засварын
+7 кейс орсон), Jev-ийн хоцролт дундаж ≈ 406 мс (p50 ≈ 388 мс, хүсэлт бүрт 3–6 мянган оролтын
+токен; процессын эхний хүсэлт TLS handshake-ийн улмаас ~1000 мс), сүүлийн үг → шийдвэр ≈ 300 мс
+(200 мс debounce орсон), бүтэн демо ≈ $0.01. Монгол хэлний benchmark нь 16/16 (100%, дундаж
+437 мс, 117 мянган оролтын токен).
 
 ## Тэмдэглэл ба хязгаарлалт
 
