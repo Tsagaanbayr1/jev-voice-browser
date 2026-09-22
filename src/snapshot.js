@@ -1,14 +1,14 @@
 /**
- * Perception: turn the controlled page into a compact, Jev-friendly state.
+ * Perception: удирдаж буй хуудсыг compact, Jev-д ээлтэй state болгон хувиргана.
  *
- *  - `collectElementsInPage` runs INSIDE the page (Playwright page.evaluate). It tags every
- *    interactive element with a stable `data-vb-id` (e01, e02, ...) and returns raw records.
- *  - `compactElements` runs in Node: prioritises viewport-visible elements, dedupes, truncates
- *    text and guards the total state size so it stays far below Jev's 32k-token limit.
+ *  - `collectElementsInPage` нь хуудасны ДОТОР ажиллана (Playwright page.evaluate). Интерактив
+ *    element бүрийг тогтвортой `data-vb-id`-ээр (e01, e02, ...) тэмдэглээд raw record-ууд буцаана.
+ *  - `compactElements` нь Node дээр ажиллана: viewport-д харагдах element-уудыг тэргүүлж, dedupe
+ *    хийж, текстийг тайрч, нийт state-ийн хэмжээг Jev-ийн 32k-token хязгаараас хамаагүй доогуур байлгана.
  */
 import { MAX_ELEMENTS, MAX_ELEMENT_TEXT, MAX_STATE_CHARS } from "./constants.js";
 
-/** Runs in the browser. Must be self-contained (no closures). */
+/** Браузер дотор ажиллана. Өөртөө бүрэн агуулагдсан байх ёстой (closure байхгүй). */
 export function collectElementsInPage() {
   const SELECTOR = [
     "a[href]",
@@ -131,7 +131,7 @@ export function collectElementsInPage() {
   };
 }
 
-/** Coarse site detection from the URL (code, not Jev). */
+/** URL-ээс сайтыг бүдүүн тодорхойлох (Jev биш, код). */
 export function detectSite(url) {
   let host = "";
   try {
@@ -155,7 +155,7 @@ export function detectSite(url) {
 
 const SEARCHY = /(^|[^a-z])(q|query|search|s|keyword|k|search_query)($|[^a-z])/i;
 
-/** Heuristic: which element id is the page's main search box? */
+/** Heuristic: хуудсын гол search box нь аль element id вэ? */
 export function findSearchBox(elements) {
   const inputs = elements.filter((e) => ["searchbox", "textbox", "combobox"].includes(e.role));
   const scored = inputs.map((e) => {
@@ -176,9 +176,9 @@ function truncate(s, n) {
 }
 
 /**
- * Build the compact element list that goes into the Jev state.
- * Priority: viewport-visible first (top-to-bottom), then the rest. Dedupe on (role, text, href).
- * Drops nameless elements unless they are inputs. Enforces MAX_ELEMENTS and MAX_STATE_CHARS.
+ * Jev-ийн state руу ордог compact element жагсаалтыг бүтээнэ.
+ * Тэргүүлэх чиглэл: эхлээд viewport-д харагдах нь (дээрээс доош), дараа нь бусад. (role, text, href)-ээр dedupe.
+ * Нэргүй element-уудыг input биш л бол хасна. MAX_ELEMENTS ба MAX_STATE_CHARS-ийг мөрдүүлнэ.
  */
 export function compactElements(rawElements, opts = {}) {
   const maxElements = opts.maxElements ?? MAX_ELEMENTS;
@@ -207,14 +207,14 @@ export function compactElements(rawElements, opts = {}) {
     if (out.length >= maxElements) break;
   }
 
-  // Size guard: shrink until the serialized list fits the budget.
+  // Хэмжээний хамгаалалт: serialized жагсаалт budget-д багтах хүртэл багасгана.
   while (out.length > 5 && JSON.stringify(out).length > maxChars) {
     out.length = Math.max(5, Math.floor(out.length * 0.8));
   }
   return out;
 }
 
-/** Full snapshot record used by the controller: raw (for execution) + compact (for Jev). */
+/** Controller-ийн хэрэглэдэг бүрэн snapshot record: raw (гүйцэтгэлд) + compact (Jev-д). */
 export function buildSnapshot(pageData, extra = {}) {
   const elements = compactElements(pageData.elements);
   const searchBoxId = findSearchBox(pageData.elements);
@@ -233,7 +233,7 @@ export function buildSnapshot(pageData, extra = {}) {
   };
 }
 
-/** Approximate token count for observability (~4 chars/token English). */
+/** Observability-д зориулсан ойролцоо token тоо (English-д ~4 тэмдэгт/token). */
 export function approxTokens(obj) {
   return Math.ceil(JSON.stringify(obj).length / 4);
 }

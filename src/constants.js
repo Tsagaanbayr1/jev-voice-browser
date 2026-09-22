@@ -1,62 +1,64 @@
 /**
- * ONE reviewable place for everything Jev sees and every threshold the policy uses.
+ * Jev-ийн харж буй бүх зүйл болон policy-гийн хэрэглэдэг бүх threshold-ийг нэг дор хянадаг газар.
  *
- * Jev (TypeSafe "System One") does not generate text. Each request carries the
- * current `state` (transcript + page snapshot) and a fan-out of typed questions
- * that are answered independently and in parallel. Code owns control flow.
+ * Jev (TypeSafe "System One") текст үүсгэдэггүй. Request бүр одоогийн `state`-ийг
+ * (transcript + page snapshot) болон бие даан, зэрэгцэн хариулагддаг typed асуултуудын
+ * fan-out-ийн хамт дагуулна. Control flow-г код эзэмшинэ.
  *
- * Rules applied here (from docs.typesafe.ai):
- *  - question ids are NOT sent to the model, so every `instructions` is a complete question
- *  - reference state with backticked paths (`transcript`, `page.site`, `elements`)
- *  - Choice options use the same contrastive shape {what, not_for, examples}
- *  - always include a `none` option; never ask Jev to count or generate
+ * Энд хэрэглэсэн дүрмүүд (docs.typesafe.ai-с):
+ *  - question id-ууд модельд илгээгддэггүй, тиймээс `instructions` бүр бүрэн асуулт байна
+ *  - state-ийг backtick-тай path-аар (`transcript`, `page.site`, `elements`) заана
+ *  - Choice option-ууд ижил contrastive хэлбэр {what, not_for, examples} хэрэглэнэ
+ *  - үргэлж `none` option оруулна; Jev-ээс хэзээ ч тоолох, үүсгэхийг бүү хүс
  */
 
-export const MODEL = "jev-1.13.0"; // pinned: aliases move on release, thresholds below were tuned on this version
+import { getLang } from "./lang.js";
 
-export const PRICE_PER_M_INPUT_TOKENS_USD = 0.042; // output tokens are free
+export const MODEL = "jev-1.13.0"; // pinned: alias-ууд release бүрт шилждэг, доорх threshold-ууд энэ хувилбар дээр тааруулагдсан
+
+export const PRICE_PER_M_INPUT_TOKENS_USD = 0.042; // output token үнэгүй
 
 // ---------------------------------------------------------------------------
-// Perception limits (state size hurts accuracy + latency; keep it small)
+// Perception-ийн хязгаарууд (state-ийн хэмжээ нарийвчлал + latency-д хор хөнөөлтэй; бага байлга)
 // ---------------------------------------------------------------------------
-export const MAX_ELEMENTS = 100; // hard cap on elements sent to Jev (255 is the Choice limit; latency grows with tokens)
-export const MAX_ELEMENT_TEXT = 60; // chars per element label
-export const MAX_STATE_CHARS = 24_000; // ~6k tokens; far below the 32k-token state limit
+export const MAX_ELEMENTS = 100; // Jev-д илгээх element-ийн хатуу дээд хязгаар (255 бол Choice-ийн хязгаар; latency token-той хамт өсдөг)
+export const MAX_ELEMENT_TEXT = 60; // element label бүрийн тэмдэгтийн тоо
+export const MAX_STATE_CHARS = 24_000; // ~6k token; 32k-token state-ийн хязгаараас хамаагүй доогуур
 export const MAX_TRANSCRIPT_CHARS = 400;
 
 // ---------------------------------------------------------------------------
-// Timing
+// Хугацаа
 // ---------------------------------------------------------------------------
-export const DEBOUNCE_MS = 200; // wait this long after the last transcript update before asking Jev
-export const MAX_INFLIGHT = 2; // overlapping Jev requests allowed; older ones are cancelled with AbortSignal
-export const SILENCE_COMPLETE_MS = 900; // no new words for this long => treat command as complete
-// Intents that carry free text (a query or text to type) cannot be acted on mid-sentence — "search
-// for alan" is a complete-sounding command but the payload may still be growing. They wait for the
-// recognizer's final result or this much silence.
+export const DEBOUNCE_MS = 200; // debounce: сүүлийн transcript update-ийн дараа Jev-ээс асуухаас өмнө энэ хугацааг хүлээ
+export const MAX_INFLIGHT = 2; // зэрэг явахыг зөвшөөрөх Jev request-ийн тоо; хуучин нь AbortSignal-аар цуцлагдана
+export const SILENCE_COMPLETE_MS = 900; // энэ хугацаанд шинэ үг гараагүй => командыг дууссан гэж үз
+// Чөлөөт текст (query эсвэл бичих текст) дагуулдаг intent-уудыг өгүүлбэрийн дунд гүйцэтгэж
+// болохгүй — "search for alan" дууссан мэт сонсогддог ч payload нь өсөж байж болно. Тэдгээр нь
+// recognizer-ийн эцсийн үр дүн эсвэл энэ хэмжээний чимээгүй байдлыг хүлээнэ.
 export const PAYLOAD_SILENCE_MS = 600;
 export const PAYLOAD_INTENTS = new Set(["search_web", "type_into_field", "select_option"]);
-export const HIGHLIGHT_MS = 600; // element flash on the controlled page
-export const CANDIDATE_TTL_MS = 8000; // numbered overlays stay this long
+export const HIGHLIGHT_MS = 600; // удирдаж буй хуудсан дээрх element-ийн flash
+export const CANDIDATE_TTL_MS = 8000; // дугаартай overlay-ууд энэ хугацаагаар үлдэнэ
 
 // ---------------------------------------------------------------------------
-// Execution policy thresholds (the "why did it act / wait" numbers shown in the UI)
+// Гүйцэтгэлийн policy threshold-ууд (UI-д харагддаг "яагаад act / wait болсон" гэсэн тоонууд)
 // ---------------------------------------------------------------------------
 export const T = {
-  intentConfidence: 0.55, // `intent` Choice confidence needed to act at all
-  complete: 0.6, // `complete` Noul: user has finished the command (bypassed after SILENCE_COMPLETE_MS)
-  isCommand: 0.5, // `is_command` Noul: user is addressing the browser at all
-  destructive: 0.5, // `destructive` Noul above this => needs confirmation ...
-  destructiveIntentConfidence: 0.9, // ... unless intent confidence is this high AND the user already said "confirm"
-  targetConfidence: 0.45, // `target` Choice below this => show numbered candidate overlays instead of clicking
-  targetTopProb: 0.35, // and the winning element must have at least this probability
-  spanConfidence: 0.35, // `text_span` / `url_span` picks below this fall back to the heuristic candidate
-  candidateCount: 3, // how many candidates to overlay when target is ambiguous
+  intentConfidence: 0.55, // ер нь act хийхэд шаардлагатай `intent` Choice confidence
+  complete: 0.6, // `complete` Noul: хэрэглэгч командаа дуусгасан (SILENCE_COMPLETE_MS-ийн дараа тойрч гарна)
+  isCommand: 0.5, // `is_command` Noul: хэрэглэгч ер нь браузер руу хандаж байгаа эсэх
+  destructive: 0.5, // `destructive` Noul үүнээс дээш => confirmation шаардна ...
+  destructiveIntentConfidence: 0.9, // ... харин intent confidence энэ хэмжээнд өндөр БА хэрэглэгч аль хэдийн "confirm" гэсэн бол эс тохиолдоно
+  targetConfidence: 0.45, // `target` Choice үүнээс доош => дарахын оронд дугаартай candidate overlay-уудыг харуул
+  targetTopProb: 0.35, // мөн ялсан element дор хаяж ийм probability-тай байх ёстой
+  spanConfidence: 0.35, // `text_span` / `url_span`-ийн сонголт үүнээс доош бол heuristic candidate руу шилжинэ
+  candidateCount: 3, // target тодорхойгүй үед хэдэн candidate overlay хийх
 };
 
 export const TARGET_INTENTS = new Set(["click_element", "type_into_field", "select_option"]);
 
 // ---------------------------------------------------------------------------
-// Sites (code owns URLs; Jev only picks the name)
+// Сайтууд (URL-ийг код эзэмшинэ; Jev зөвхөн нэрийг сонгоно)
 // ---------------------------------------------------------------------------
 export const SITE_HOME = {
   google: "https://www.google.com/",
@@ -71,7 +73,7 @@ export const SITE_HOME = {
   example_com: "https://example.com/",
 };
 
-// Search URL templates; `%s` is replaced with the URL-encoded query.
+// Хайлтын URL template-ууд; `%s` нь URL-encode хийсэн query-гээр солигдоно.
 export const SITE_SEARCH = {
   google: "https://www.google.com/search?q=%s",
   duckduckgo: "https://duckduckgo.com/?q=%s",
@@ -87,8 +89,20 @@ export const SITE_SEARCH = {
 
 export const DEFAULT_SEARCH_ENGINE = "duckduckgo";
 
+/**
+ * Яригдсан хэлний destination-ууд: дээрх default-ууд, language pack-аар дарж
+ * бичигдэнэ (Монгол хэл "википедиа"-г mn.wikipedia.org руу илгээнэ).
+ */
+export function sitesFor(lang) {
+  const pack = getLang(lang);
+  return {
+    home: { ...SITE_HOME, ...pack.siteHome },
+    search: { ...SITE_SEARCH, ...pack.siteSearch },
+  };
+}
+
 // ---------------------------------------------------------------------------
-// Questions. All are asked in ONE request per transcript update (speculative fan-out).
+// Асуултууд. Бүгд transcript update бүрт НЭГ request-ээр асуугдана (speculative fan-out).
 // ---------------------------------------------------------------------------
 
 export const INTENT_CRITERIA = {
@@ -212,7 +226,7 @@ export const QUESTIONS = {
       focus:
         "Match by the element's visible text, role and position words like first/second/top (lines are in visual order, top of page first). Pick none if the command does not refer to any element on this page, or if the referenced element is not in the list.",
     },
-    // criteria are built per request from the element list + none
+    // criteria нь request бүрт element-ийн жагсаалт + none-оос бүтээгдэнэ
   },
 
   site: {
@@ -315,3 +329,56 @@ export const QUESTIONS = {
     },
   },
 };
+
+// ---------------------------------------------------------------------------
+// Хэл тус бүрийн асуултууд
+// ---------------------------------------------------------------------------
+
+/**
+ * QUESTIONS дээр яригдсан хэлний example-ууд нэмэгдсэн хувилбар.
+ *
+ * Асуултын үг English хэвээр үлдэнэ — Jev English instruction-уудыг уншиж, Монгол
+ * `transcript`-ийг зөв шүүдэг — гэхдээ EXAMPLE-ууд яригдсан хэлийг заавал агуулах
+ * ёстой. jev-1.13.0 дээр зөвхөн English example-тай хэмжихэд: "буцах" (go back)
+ * нь intent=none авсан, "Алан Туринг хай" (search for Alan Turing) нь is_command
+ * 0.22 авч, 0.5 gate-аас доогуур байсан тул хоёулаа үл тоомсорлогдсон.
+ */
+export function questionsForLang(lang) {
+  const pack = getLang(lang);
+  const q = structuredClone(QUESTIONS);
+  if (pack.code === "en") return q;
+
+  const add = (target, extra) => {
+    if (!extra?.length) return;
+    target.examples = [...(target.examples ?? []), ...extra];
+  };
+
+  for (const [intent, examples] of Object.entries(pack.intentExamples)) {
+    if (q.intent.criteria[intent]) add(q.intent.criteria[intent], examples);
+  }
+  add(q.is_command.criteria.true, pack.isCommandExamples?.true);
+  add(q.is_command.criteria.false, pack.isCommandExamples?.false);
+  add(q.complete.criteria.true, pack.completeExamples?.true);
+  add(q.complete.criteria.false, pack.completeExamples?.false);
+
+  (pack.scrollAmountWords ?? []).forEach((words, i) => {
+    if (q.scroll_amount.criteria[i]) {
+      q.scroll_amount.criteria[i].what = `${q.scroll_amount.criteria[i].what} — ${pack.label}: ${words}`;
+    }
+  });
+
+  for (const [site, alias] of Object.entries(pack.siteAliases ?? {})) {
+    if (typeof q.site.criteria[site] === "string") {
+      q.site.criteria[site] = `${q.site.criteria[site]} — spoken in ${pack.label}: ${alias}`;
+    }
+  }
+
+  // Хэлийг чанга хэлж өг, ингэснээр тэр хэл дээрх богино imperative нь chit-chat
+  // эсвэл дутуу fragment гэж андуурагдахгүй.
+  const note = ` \`transcript\` is speech in ${pack.label} (${pack.code}) or English; judge either language the same way.`;
+  for (const key of ["intent", "is_command", "complete", "site", "destructive", "target", "text_span", "url_span", "scroll_amount"]) {
+    const ins = q[key]?.instructions;
+    if (ins && typeof ins === "object") ins.focus = `${ins.focus ?? ""}${note}`;
+  }
+  return q;
+}

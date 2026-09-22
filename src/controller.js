@@ -1,6 +1,14 @@
 /**
- * Orchestrator: transcript updates -> (debounce, cancel stale) -> one Jev request ->
- * policy -> Playwright action -> fresh snapshot. Emits events for the UI / demo / tests.
+ * Оркестратор: transcript шинэчлэлт -> (debounce, хуучирсныг цуцлах) -> нэг Jev request ->
+ * policy -> Playwright action -> шинэ snapshot. UI / demo / test-д зориулж event гаргана.
+ *
+ * ХЭЛ НЬ ХОЁР ТЭНХЛЭГТЭЙ, тэдгээр нь бие даасан:
+ *   - `lang`   — ЮУ ЯРИГДАЖ байна. Recognizer болон Jev-д өгөх жишээнүүдийг тогтооно.
+ *   - `uiLang` — ЮУ ХАРАГДАЖ байна. Зөвхөн дэлгэцэнд; model-д хэзээ ч хүрэхгүй.
+ * Монголоор ярьж байхдаа English debug label-уудыг унших нь дэмжигддэг тохиргоо,
+ * тиймээс энэ хоёр нь тусдаа талбар, тусдаа setter-тай. Тэдгээр нь мөргөлдөж болох
+ * цорын ганц газар бол доорх `pendingConfirmation` бөгөөд энэ нь `describe()` —
+ * English, хөлдөөсөн — хэвээр үлддэг, учир нь энэ нь уншигчид биш, Jev-д өгөх input.
  */
 import { EventEmitter } from "node:events";
 import { DEBOUNCE_MS, SILENCE_COMPLETE_MS, CANDIDATE_TTL_MS, MAX_INFLIGHT, MODEL, T } from "./constants.js";
@@ -8,30 +16,34 @@ import { decide, isAbortError } from "./jev.js";
 import { evaluatePolicy, describe } from "./policy.js";
 import { execute } from "./executor.js";
 import { parseCandidatePick, cleanTranscript } from "./spans.js";
+import { DEFAULT_LANG, getLang, isSupportedLang } from "./lang.js";
 import { approxTokens } from "./snapshot.js";
+import { t as tr, resolveUiLang, DEFAULT_UI_LANG, UI_LANGUAGES, actionLabel, actionRef } from "./public/i18n.js";
 
 const avg = (xs) => (xs.length ? Math.round(xs.reduce((a, b) => a + b, 0) / xs.length) : null);
 
 export class Controller extends EventEmitter {
   /**
    * @param {{browser: import('./browser.js').BrowserManager, decideFn?: Function, executeFn?: Function}} opts
-   *   decideFn / executeFn are injectable for tests (default: real Jev + Playwright).
+   *   decideFn / executeFn нь test-д зориулж inject хийгддэг (default: бодит Jev + Playwright).
    */
-  constructor({ browser, decideFn = decide, executeFn = execute }) {
+  constructor({ browser, decideFn = decide, executeFn = execute, lang = DEFAULT_LANG, uiLang = DEFAULT_UI_LANG }) {
     super();
     this.browser = browser;
+    this.lang = isSupportedLang(lang) ? lang : DEFAULT_LANG;
+    this.uiLang = resolveUiLang(uiLang);
     this._decide = decideFn;
     this._execute = executeFn;
     this.snapshot = null;
     this.snapshotAt = 0;
     this.utterance = null; // { id, physicalId, prefix, gen, text, final, startedAt, updatedAt, actedOn, actedText }
-    this.consumed = null; // { id: physical utterance id, prefix: executed text (lowercase), gen }
-    this.pending = null; // destructive action awaiting "confirm"
+    this.consumed = null; // { id: physical utterance-ийн id, prefix: гүйцэтгэсэн text (жижиг үсгээр), gen }
+    this.pending = null; // "confirm" хүлээж буй destructive action
     this.candidates = null; // { list: [{n,id,label}], intent: {type,text}, at }
     this.lastDecision = null;
     this.debounceTimer = null;
     this.silenceTimer = null;
-    this.inflight = []; // [{ac, text, at}] requests currently awaiting Jev
+    this.inflight = []; // [{ac, text, at}] Jev-г хүлээж байгаа request-үүд
     this.busy = false;
     this.log = [];
     this.stats = { calls: 0, inputTokens: 0, costUsd: 0, latencies: [], actions: 0, model: MODEL, commandToActionMs: [], decisionMs: [] };
@@ -41,14 +53,29 @@ export class Controller extends EventEmitter {
 
   async start() {
     await this.refreshSnapshot();
-    this._log("info", `ready — model ${MODEL}, ${this.snapshot.elements.length} elements on ${this.snapshot.url}`);
+    this._log("info", "log.ready", { model: MODEL, n: this.snapshot.elements.length, url: this.snapshot.url });
   }
 
-  _log(level, msg, extra = {}) {
-    const entry = { t: Date.now(), level, msg, ...extra };
+  /**
+   * Лог бичлэгийг KEY-ээр нэмнэ. Бичлэг нь render хийгдээгүй — `key` + `params` —
+   * хэвээр, `msg` нь түүний English render бөгөөд scripts/demo.js болон терминал
+   * үүнийг уншдаг тул үлдээдэг. Key-г хадгалах нь toggle-ийн дараа control page
+   * бүх түүхийг шинэ хэлээр дахин render хийх боломж: emit хийх мөчид юу ч хөлдөхгүй.
+   */
+  _log(level, key, params = {}, extra = {}) {
+    const entry = { t: Date.now(), level, key, params, msg: tr("en", key, params), ...extra };
     this.log.push(entry);
     if (this.log.length > 200) this.log.shift();
     this.emit("log", entry);
+  }
+
+  /**
+   * Хамтрагчийн эзэмшлийн event-ийг логлоно (STT rail-ийн
+   * open/refused/failed шилжилтийг server логолдог). `_log`-той ижил хэлбэртэй тул
+   * хуудас дахин render хийдэг түүхэд орж, бусадтай адил орчуулагдана.
+   */
+  logEvent(level, key, params = {}) {
+    this._log(level, key, params);
   }
 
   async refreshSnapshot() {
@@ -58,27 +85,27 @@ export class Controller extends EventEmitter {
     return this.snapshot;
   }
 
-  /** Typed command fallback: behaves like a final utterance. */
+  /** Typed command-ийн fallback: final utterance шиг ажиллана. */
   handleCommand(text) {
     return this.handleTranscript({ text, final: true, utteranceId: `typed-${Date.now()}` });
   }
 
   /**
-   * Called on every partial transcript from the mic (or the demo replay).
+   * Микрофоноос (эсвэл demo replay-ээс) ирэх partial transcript бүр дээр дуудагдана.
    * @param {{text: string, final?: boolean, utteranceId: string|number}} msg
    */
   handleTranscript({ text, final = false, utteranceId }) {
     let clean = cleanTranscript(text);
     const now = Date.now();
 
-    // One action per utterance — but if the user keeps talking in the same breath
-    // ("go to wikipedia ... search for alan turing"), the words after the already-executed
-    // command become a fresh virtual utterance (id "<physical>+<n>"). Fewer than two new words
-    // ("please") are ignored.
+    // Нэг utterance-д нэг action — гэхдээ хэрэглэгч нэг амьсгалаар үргэлжлүүлэн ярьвал
+    // ("go to wikipedia ... search for alan turing"), аль хэдийн гүйцэтгэсэн командын
+    // дараах үгс шинэ виртуал utterance болно (id "<physical>+<n>"). Хоёр үгээс цөөн
+    // шинэ үг ("please") алгасагдана.
     const consumed = this.consumed;
     let virtualId = utteranceId;
     if (consumed && consumed.id === utteranceId) {
-      if (!clean.toLowerCase().startsWith(consumed.prefix)) return; // recognizer revised the executed words; ignore
+      if (!clean.toLowerCase().startsWith(consumed.prefix)) return; // recognizer гүйцэтгэсэн үгсийг өөрчилсөн; алгас
       clean = clean.slice(consumed.prefix.length).trim();
       if (clean.split(/\s+/).filter(Boolean).length < 2) return;
       virtualId = `${utteranceId}+${consumed.gen}`;
@@ -97,7 +124,7 @@ export class Controller extends EventEmitter {
         actedOn: false,
         actedText: null,
       };
-      if (virtualId !== utteranceId) this._log("debug", `continuing utterance → new command "${clean}"`);
+      if (virtualId !== utteranceId) this._log("debug", "log.continuing", { text: clean });
     } else {
       if (clean === this.utterance.text && final === this.utterance.final) return;
       this.utterance.text = clean;
@@ -107,13 +134,13 @@ export class Controller extends EventEmitter {
     this.emit("transcript", { text: clean, final, utteranceId: virtualId, actedOn: this.utterance.actedOn });
     if (!clean || this.utterance.actedOn) return;
 
-    // Deterministic shortcut: numbered candidate overlays + a spoken number => no Jev needed.
+    // Deterministic shortcut: дугаартай candidate overlay + хэлсэн тоо => Jev хэрэггүй.
     if (this.candidates && now - this.candidates.at < CANDIDATE_TTL_MS) {
-      const n = parseCandidatePick(clean, this.candidates.list.length);
+      const n = parseCandidatePick(clean, this.candidates.list.length, this.lang);
       if (n) {
         const c = this.candidates.list[n - 1];
         this._consume(this.utterance, clean);
-        this._log("info", `picked candidate ${n} (${c.label}) by number — no model call`);
+        this._log("info", "log.candidate", { n, label: c.label });
         const action = { ...this.candidates.intent, targetId: c.id, label: c.label };
         this.candidates = null;
         this._runAction(action, { via: "candidate-pick" });
@@ -126,7 +153,7 @@ export class Controller extends EventEmitter {
     this.debounceTimer = setTimeout(() => this.decideNow("debounce"), final ? 0 : DEBOUNCE_MS);
   }
 
-  /** Mark `text` of this utterance as executed so later words in the same breath start a new command. */
+  /** Энэ utterance-ийн `text`-ийг гүйцэтгэсэн гэж тэмдэглэж, нэг амьсгалаар хэлсэн дараагийн үгс шинэ команд эхлүүлэх болно. */
   _consume(utt, text) {
     utt.actedOn = true;
     utt.actedText = text;
@@ -137,18 +164,18 @@ export class Controller extends EventEmitter {
     };
   }
 
-  /** Ask Jev about the current utterance. Cancels any in-flight request. */
+  /** Одоогийн utterance-ийн талаар Jev-ээс асууна. Бүх in-flight request-ийг цуцална. */
   async decideNow(trigger = "manual") {
     const utt = this.utterance;
     if (!utt || !utt.text || utt.actedOn) return;
     if (this.busy) {
-      // An action is executing; re-evaluate once it finishes.
+      // Action гүйцэтгэж байна; дууссаны дараа дахин үнэлнэ.
       this.silenceTimer = setTimeout(() => this.decideNow("after-action"), 150);
       return;
     }
-    // Allow up to MAX_INFLIGHT overlapping requests (a request for the previous partial may
-    // still be useful — if the words already commit to an action we act on it). Anything older
-    // is stale and gets cancelled via AbortSignal.
+    // MAX_INFLIGHT хүртэл давхардсан request зөвшөөрнө (өмнөх partial-ийн request
+    // одоо ч хэрэгтэй байж болно — үгс аль хэдийн action-д шийдэгдсэн бол түүгээр ажиллана).
+    // Түүнээс хуучин нь stale бөгөөд AbortSignal-аар цуцлагдана.
     while (this.inflight.length >= MAX_INFLIGHT) {
       const old = this.inflight.shift();
       old.ac.abort();
@@ -168,16 +195,17 @@ export class Controller extends EventEmitter {
           snapshot: this.snapshot,
           pendingConfirmation: this.pending ? describe(this.pending) : null,
           tabs: this.browser.tabInfo(),
+          lang: this.lang,
         },
         { signal: ac.signal },
       );
     } catch (err) {
       this.inflight = this.inflight.filter((r) => r !== req);
       if (isAbortError(err) || ac.signal.aborted) {
-        this._log("debug", `cancelled stale request for "${textAtRequest}"`);
+        this._log("debug", "log.cancelled", { text: textAtRequest });
         return;
       }
-      this._log("error", `Jev error: ${err.message || err}`);
+      this._log("error", "log.jevError", { message: err.message || err });
       this.emit("error", err);
       return;
     }
@@ -191,9 +219,9 @@ export class Controller extends EventEmitter {
     if (this.stats.latencies.length > 200) this.stats.latencies.shift();
     if (result.model && result.model !== this.stats.model) this.stats.model = result.model;
 
-    // If more words arrived while this request was in flight, its transcript is a prefix of the
-    // real one: it may still act on closed-set intents (the words already commit to "go back"),
-    // but it must never be treated as final/silent — free-text payloads would be truncated.
+    // Энэ request in-flight байх хооронд илүү үг ирсэн бол түүний transcript нь
+    // бодит transcript-ийн prefix: closed-set intent дээр ажиллаж болно (үгс аль хэдийн
+    // "буцах"-ыг шийдсэн), гэхдээ final/silent гэж хэзээ ч үзэхгүй — free-text payload тайрагдна.
     const stale = utt.text !== textAtRequest;
     const silentMs = stale ? 0 : Date.now() - utt.updatedAt;
     const policy = evaluatePolicy({
@@ -203,12 +231,13 @@ export class Controller extends EventEmitter {
       silentMs,
       isFinal: utt.final && !stale,
       pending: this.pending,
+      lang: this.lang,
     });
 
     const decision = {
       transcript: textAtRequest,
       trigger,
-      decisionLagMs: Math.max(0, Date.now() - utt.updatedAt), // last spoken word -> decision available
+      decisionLagMs: Math.max(0, Date.now() - utt.updatedAt), // хэлсэн сүүлийн үг -> decision бэлэн
       answers: result.answers,
       candidates: result.candidates,
       latencyMs: result.latencyMs,
@@ -225,10 +254,14 @@ export class Controller extends EventEmitter {
     };
     this.lastDecision = decision;
     this.emit("decision", decision);
-    this._log(
-      policy.decision === "act" ? "act" : "info",
-      `${result.latencyMs}ms · "${textAtRequest}" → ${policy.decision}: ${policy.summary}`,
-    );
+    this._log(policy.decision === "act" ? "act" : "info", "log.decision", {
+      ms: result.latencyMs,
+      text: textAtRequest,
+      // `decision` бол identifier, хэвээрээ үлдэнэ; харин summary нь KEYED хэлбэрээр явж,
+      // хуудас түүнийг — дотор нь байгаа action-тай хамт — өөрийн хэлээр render хийнэ.
+      decision: policy.decision,
+      summary: policy.summaryKey ?? policy.summary,
+    });
 
     switch (policy.decision) {
       case "act":
@@ -240,20 +273,22 @@ export class Controller extends EventEmitter {
       case "confirm":
         this._consume(utt, textAtRequest);
         this.pending = policy.action;
-        await this.browser.overlay("toast", `Say "confirm" to ${describe(policy.action)}`, 6000);
+        // Хуудасны overlay бол render хийгдсэн artifact, state биш: нэг л удаа буудаг
+        // тул энд, яг одоо, одоогийн interface хэлээр render хийгдэнэ.
+        await this.browser.overlay("toast", tr(this.uiLang, "toast.confirm", { action: actionLabel(policy.action, this.uiLang) }), 6000);
         this.emit("pending", { action: policy.action, summary: policy.summary });
         break;
       case "cancel":
         this._consume(utt, textAtRequest);
         this.pending = null;
-        await this.browser.overlay("toast", "cancelled");
+        await this.browser.overlay("toast", tr(this.uiLang, "toast.cancelled"));
         this.emit("pending", null);
         break;
       case "disambiguate": {
         const list = policy.candidates.map((c, i) => ({ n: i + 1, id: c.id, label: c.label, p: c.p }));
         this.candidates = { list, intent: policy.pendingIntent, at: Date.now() };
         await this.browser.overlay("candidates", list, CANDIDATE_TTL_MS);
-        await this.browser.overlay("toast", "Which one? Say the number.", 3000);
+        await this.browser.overlay("toast", tr(this.uiLang, "toast.whichOne"), 3000);
         this.emit("candidates", list);
         this._scheduleSilenceRetry(utt);
         break;
@@ -266,7 +301,7 @@ export class Controller extends EventEmitter {
     }
   }
 
-  /** If the user stops talking, re-evaluate with silentMs so `complete` is bypassed. */
+  /** Хэрэглэгч ярихаа боливол `complete`-ыг тойрохын тулд silentMs-тай дахин үнэлнэ. */
   _scheduleSilenceRetry(utt, retryInMs = null) {
     clearTimeout(this.silenceTimer);
     const waitFor = retryInMs ?? Math.max(50, SILENCE_COMPLETE_MS - (Date.now() - utt.updatedAt));
@@ -280,7 +315,7 @@ export class Controller extends EventEmitter {
     const t0 = Date.now();
     const utt = meta.utterance || this.utterance;
     try {
-      const res = await this._execute(action, this.browser);
+      const res = await this._execute(action, this.browser, { uiLang: this.uiLang });
       const took = Date.now() - t0;
       const sinceLastWord = utt ? Date.now() - utt.updatedAt : null;
       const sinceUtteranceStart = utt ? Date.now() - utt.startedAt : null;
@@ -294,15 +329,23 @@ export class Controller extends EventEmitter {
         ok: res.ok,
         detail: res.detail,
         executeMs: took,
-        decisionMs, // last word -> decision
-        sinceLastWordMs: sinceLastWord, // last word -> action finished (includes page load)
+        decisionMs, // сүүлийн үг -> decision
+        sinceLastWordMs: sinceLastWord, // сүүлийн үг -> action дууссан (page load багтана)
         sinceUtteranceStartMs: sinceUtteranceStart,
         via: meta.via || "jev",
       };
-      this._log(res.ok ? "act" : "warn", `${res.ok ? "✓" : "✗"} ${describe(action)} — decided ${decisionMs ?? "?"}ms after last word, executed in ${took}ms ${res.detail || ""}`);
+      this._log(res.ok ? "act" : "warn", "log.action", {
+        mark: res.ok ? "✓" : "✗",
+        summary: actionRef(action),
+        decided: `${decisionMs ?? "?"}ms`,
+        ms: took,
+        // `detail` нь executor-ийн өөрийн алдааны prose, key-тэй; харин page URL эсвэл
+        // "scrollY=420" бол data, энгийн string хэлбэрээр явна.
+        detail: res.detailKey ?? res.detail ?? "",
+      });
       this.emit("action", entry);
     } catch (err) {
-      this._log("error", `action failed: ${describe(action)} — ${err.message || err}`);
+      this._log("error", "log.actionError", { summary: actionRef(action), message: err.message || err });
       this.emit("action", { action, ok: false, detail: String(err.message || err) });
     } finally {
       this.busy = false;
@@ -310,9 +353,32 @@ export class Controller extends EventEmitter {
     }
   }
 
-  /** "Undo" = go back in history. */
+  /** "Undo" = history-д буцах. */
   async undo() {
-    await this._runAction({ type: "go_back", label: "undo (back)" }, { via: "undo" });
+    await this._runAction({ type: "go_back", label: tr("en", "label.undo"), labelKey: { key: "label.undo" } }, { via: "undo" });
+  }
+
+  /** Ярих хэлийг солино (control page-ийн selector). */
+  setLanguage(code) {
+    if (!isSupportedLang(code) || code === this.lang) return this.lang;
+    this.lang = code;
+    this._log("info", "log.language", { label: getLang(code).label, code });
+    this.emit("lang", { lang: this.lang, label: getLang(this.lang).label });
+    return this.lang;
+  }
+
+  /**
+   * Interface хэлийг солино. Зөвхөн дэлгэцэнд: эндээс Jev, recognizer эсвэл policy
+   * руу юу ч хүрэхгүй. `uiLang` event гаргаж, server түүнийг broadcast хийж,
+   * хуудас түүхээ дахин render хийх боломжтой болно.
+   */
+  setUiLanguage(code) {
+    const next = resolveUiLang(code);
+    if (next === this.uiLang) return this.uiLang;
+    this.uiLang = next;
+    this._log("info", "log.uiLang", { label: UI_LANGUAGES[next].label });
+    this.emit("uiLang", { uiLang: this.uiLang, uiLangLabel: UI_LANGUAGES[this.uiLang].label });
+    return this.uiLang;
   }
 
   uiState() {
@@ -321,6 +387,11 @@ export class Controller extends EventEmitter {
     const p50 = sorted.length ? sorted[Math.floor(sorted.length / 2)] : null;
     return {
       model: this.stats.model,
+      lang: this.lang,
+      langLabel: getLang(this.lang).label,
+      speechLang: getLang(this.lang).speechLang,
+      uiLang: this.uiLang,
+      uiLangLabel: UI_LANGUAGES[this.uiLang].label,
       thresholds: T,
       stats: {
         calls: this.stats.calls,
@@ -342,7 +413,9 @@ export class Controller extends EventEmitter {
         tabs: this.snapshot.tabs,
       },
       lastDecision: this.lastDecision,
-      pending: this.pending ? { summary: describe(this.pending) } : null,
+      // `action` нь English `summary`-ийн хажууд явж, хуудас "⚠ pending: …"-г өөрийн
+      // хэлээр, дотор нь action-ыг оруулж, орчуулж render хийх боломжтой болно.
+      pending: this.pending ? { action: this.pending, summary: describe(this.pending) } : null,
       candidates: this.candidates?.list ?? null,
       log: this.log.slice(-60),
     };

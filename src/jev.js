@@ -1,12 +1,13 @@
 /**
- * The single Jev request per transcript update: build state + speculative question fan-out,
- * call the API, return typed answers with latency / usage / cost.
+ * Transcript update бүрт ганц Jev request: state + speculative question fan-out-ийг бүтээж,
+ * API-г дуудаж, latency / usage / cost-той typed хариултуудыг буцаана.
  *
- * API key stays server-side. Reads TYPESAFE_API_KEY, falling back to JEV_API_KEY.
+ * API key нь server талд үлдэнэ. TYPESAFE_API_KEY-г уншиж, байхгүй бол JEV_API_KEY руу шилжинэ.
  */
 import { TypeSafeClient, choice, noul, score, APIUserAbortError } from "@typesafe-ai/sdk";
-import { MODEL, PRICE_PER_M_INPUT_TOKENS_USD, QUESTIONS, MAX_TRANSCRIPT_CHARS } from "./constants.js";
+import { MODEL, PRICE_PER_M_INPUT_TOKENS_USD, questionsForLang, MAX_TRANSCRIPT_CHARS } from "./constants.js";
 import { extractTextCandidates, extractUrlCandidates } from "./spans.js";
+import { DEFAULT_LANG, getLang } from "./lang.js";
 
 let _client = null;
 
@@ -43,7 +44,7 @@ function hostOf(url) {
   }
 }
 
-/** `e09 link "GitHub - typesafe-ai" → github.com` — short, human-readable, few tokens. */
+/** `e09 link "GitHub - typesafe-ai" → github.com` — богино, хүн уншихад ойлгомжтой, цөөн token. */
 export function encodeElement(el, pageHost = "") {
   let s = `${el.id} ${el.role}`;
   const text = el.text || "";
@@ -58,13 +59,15 @@ export function encodeElement(el, pageHost = "") {
 }
 
 /**
- * Build the state object and question map for one decision.
- * Exported so tests can inspect exactly what Jev sees.
+ * Нэг шийдвэрт зориулж state object болон question map-ийг бүтээнэ.
+ * Jev яг юу харж байгааг тестүүд шалгаж чадахын тулд export хийсэн.
  */
-export function buildRequest({ transcript, snapshot, pendingConfirmation = null, tabs = null }) {
+export function buildRequest({ transcript, snapshot, pendingConfirmation = null, tabs = null, lang = DEFAULT_LANG }) {
   const text = String(transcript || "").slice(-MAX_TRANSCRIPT_CHARS);
-  const textCandidates = extractTextCandidates(text);
-  const urlCandidates = extractUrlCandidates(text);
+  const textCandidates = extractTextCandidates(text, lang);
+  const urlCandidates = extractUrlCandidates(text, lang);
+  const QUESTIONS = questionsForLang(lang);
+  const pack = getLang(lang);
 
   const elements = snapshot?.elements || [];
   const pageHost = hostOf(snapshot?.url);
@@ -75,10 +78,13 @@ export function buildRequest({ transcript, snapshot, pendingConfirmation = null,
       title: (snapshot?.title || "").slice(0, 120),
       site: snapshot?.site || "blank",
     },
-    // One compact line per element, in visual order (viewport first). The `target` question's
-    // options are these ids; their text lives here (semantic-find pattern) to halve token use.
+    // Element бүрт нэг compact мөр, харагдах дарааллаар (viewport эхэнд). `target` асуултын
+    // option-ууд нь эдгээр id; token-ийг хагасалхын тулд тэдгээрийн текст энд байрлана (semantic-find pattern).
     elements: elements.map((el) => encodeElement(el, pageHost)),
   };
+  // Jev transcript-ийг ямар хэлээр ирсэн тэр хэлээр нь уншдаг; ямар хэл хүлээж
+  // байгааг хэлж өгснөөр богино imperative нь chit-chat мэт харагдахаас сэргийлнэ.
+  if (pack.code !== "en") state.spoken_language = pack.label;
   if (pendingConfirmation) state.pending_confirmation = pendingConfirmation;
   if (tabs && tabs.length > 1) state.open_tabs = tabs.length;
 
@@ -112,8 +118,8 @@ export function buildRequest({ transcript, snapshot, pendingConfirmation = null,
 }
 
 /**
- * Ask Jev. Resolves to { answers, latencyMs, usage, costUsd, model, requestId, candidates, state }
- * or rejects with APIUserAbortError when `signal` aborts (newer transcript arrived).
+ * Jev-ээс асуу. { answers, latencyMs, usage, costUsd, model, requestId, candidates, state } руу
+ * resolve хийнэ, эсвэл `signal` abort хийхэд (шинэ transcript ирэхэд) APIUserAbortError-оор reject хийнэ.
  */
 export async function decide(input, { signal } = {}) {
   const client = getClient();
@@ -124,6 +130,7 @@ export async function decide(input, { signal } = {}) {
     .withResponse();
   const latencyMs = Math.round(performance.now() - t0);
   return {
+    lang: input.lang ?? DEFAULT_LANG,
     answers: data.answers,
     latencyMs,
     usage: data.usage,

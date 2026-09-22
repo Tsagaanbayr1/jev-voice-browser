@@ -1,7 +1,7 @@
 /**
- * Browser management: launch a headed Playwright Chromium with a persistent profile
- * (so it feels like "your browser"), or attach to a running Chrome via --cdp ws://...
- * Tracks tabs and exposes the active page.
+ * Браузерын удирдлага: persistent profile-той headed Playwright Chromium-ийг эхлүүлэх
+ * (тиймээс "өөрийн браузер" мэт мэдрэгдэнэ), эсвэл --cdp ws://...-ээр ажиллаж буй Chrome-д залгах.
+ * Tab-уудыг хянаж, идэвхтэй хуудсыг ил гаргана.
  */
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -91,7 +91,7 @@ export class BrowserManager {
     return this.pages.map((p, i) => ({ index: i, url: p.url(), active: p === this.active }));
   }
 
-  /** Snapshot the active page (URL, title, compact element list, search box, site). */
+  /** Идэвхтэй хуудсыг snapshot хий (URL, title, compact element жагсаалт, search box, site). */
   async snapshot() {
     const page = await this.ensurePage();
     try {
@@ -99,16 +99,16 @@ export class BrowserManager {
       const data = await page.evaluate(collectElementsInPage);
       return buildSnapshot(data, { tabs: this.tabInfo() });
     } catch (err) {
-      // e.g. navigation in progress; return a minimal snapshot
+      // жишээ нь navigation явагдаж байна; хамгийн бага snapshot буцаа
       return buildSnapshot({ url: page.url(), title: "", scrollY: 0, scrollHeight: 0, viewportHeight: 0, elements: [] }, { tabs: this.tabInfo(), error: String(err.message || err) });
     }
   }
 
-  /** Call window.__vb.<fn>(...args) in the active page, swallowing errors. */
+  /** Идэвхтэй хуудсанд window.__vb.<fn>(...args)-г дуудаж, алдааг залгина. */
   async overlay(fn, ...args) {
     const page = this.page;
     if (!page) return;
-    await page.evaluate(installOverlay).catch(() => {}); // no-op if already installed by the init script
+    await page.evaluate(installOverlay).catch(() => {}); // init script-ээр аль хэдийн суусан бол no-op
     await page
       .evaluate(
         ([fn, args]) => {

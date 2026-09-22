@@ -1,29 +1,39 @@
 /**
- * Node server: serves the control page, bridges WebSocket <-> Controller, owns the API key.
+ * Node server: control page-ийг serve хийж, WebSocket <-> Controller-ийг холбож, API key-г эзэмшинэ.
  *
- *   node src/server.js [--port 8787] [--host 127.0.0.1] [--headless] [--cdp ws://127.0.0.1:9222/devtools/browser/...] [--start-url https://...]
+ *   node src/server.js [--port 8787] [--host 127.0.0.1] [--headless] [--cdp ws://127.0.0.1:9222/devtools/browser/...] [--start-url https://...] [--lang mn] [--ui-lang mn]
  */
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
-import { WebSocketServer } from "ws";
+// Node-ийн global биш, `ws` WebSocket: streaming rail нь Authorization header-тэй
+// нээгддэг бөгөөд зөвхөн энэ client л handshake дээр түүнийг тавьж чадна.
+import { WebSocket, WebSocketServer } from "ws";
 import { BrowserManager } from "./browser.js";
 import { Controller } from "./controller.js";
 import { hasApiKey } from "./jev.js";
-import { MODEL, QUESTIONS, T } from "./constants.js";
+import { MODEL, questionsForLang, T } from "./constants.js";
+import { DEFAULT_LANG, LANGUAGES, isSupportedLang, getLang } from "./lang.js";
+import { transcribe, sttStatus, streamingStatus, streamSocketUrl, apiKey } from "./stt.js";
+import { resolveUiLang, UI_LANGUAGES } from "./public/i18n.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export function parseArgs(argv) {
   const out = {
     port: Number(process.env.PORT) || 8787,
-    // Bind to loopback only by default: anyone who can reach this port can drive the browser
-    // and spend your API credits. Use --host 0.0.0.0 deliberately if you need LAN access.
+    // Default-аар зөвхөн loopback-д bind хийнэ: энэ port-д хүрч чадах хүн бүр browser-ийг
+    // удирдаж, API credit-ийг чинь зарцуулж чадна. LAN хэрэгтэй бол --host 0.0.0.0-ыг санаатайгаар ашигла.
     host: process.env.HOST || "127.0.0.1",
     headless: false,
     cdp: null,
     startUrl: "https://example.com/",
+    // Ярих хэл; control page үүнийг шууд сольж чадна.
+    lang: isSupportedLang(process.env.VOICE_LANG) ? process.env.VOICE_LANG : DEFAULT_LANG,
+    // Interface хэл — зөвхөн дэлгэцэнд, Jev-д хэзээ ч явуулахгүй. Хуудас ч гэсэн
+    // шууд сольж чадна; энэ бол зөвхөн эхлэх утга.
+    uiLang: resolveUiLang(process.env.VOICE_UI_LANG),
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -32,6 +42,8 @@ export function parseArgs(argv) {
     else if (a === "--headless") out.headless = true;
     else if (a === "--cdp") out.cdp = argv[++i];
     else if (a === "--start-url") out.startUrl = argv[++i];
+    else if (a === "--lang") out.lang = argv[++i];
+    else if (a === "--ui-lang") out.uiLang = resolveUiLang(argv[++i]);
   }
   return out;
 }
@@ -43,16 +55,68 @@ export async function startServer(opts = {}) {
   }
   const browser = new BrowserManager();
   await browser.launch({ headless: opts.headless, cdp: opts.cdp, startUrl: opts.startUrl });
-  const controller = new Controller({ browser });
+  const controller = new Controller({ browser, lang: opts.lang, uiLang: opts.uiLang });
   await controller.start();
 
   const app = express();
   app.use(express.static(path.join(__dirname, "public")));
   app.get("/api/state", (_req, res) => res.json(controller.uiState()));
-  app.get("/api/questions", (_req, res) => res.json({ model: MODEL, thresholds: T, questions: QUESTIONS }));
+  app.get("/api/questions", (req, res) => {
+    const lang = isSupportedLang(req.query.lang) ? req.query.lang : controller.lang;
+    res.json({ model: MODEL, thresholds: T, lang, questions: questionsForLang(lang) });
+  });
+  // Server талын speech-to-text: browser нэг WAV utterance илгээж, бид transcript
+  // буцаана. API key нь server-ээс хэзээ ч гарахгүй, аудио хаана ч хадгалагдахгүй.
+  app.post("/api/transcribe", express.raw({ type: ["audio/wav", "application/octet-stream"], limit: "8mb" }), async (req, res) => {
+    const lang = isSupportedLang(req.query.lang) ? req.query.lang : controller.lang;
+    try {
+      const r = await transcribe(req.body, { lang });
+      // Silence болон transcript ижил аргаар логлогдоно; "(silence)" тэмдэглэл нь
+      // өөрөө key тул аль ч interface хэл дээр зөв уншигдана.
+      controller.logEvent(r.text ? "info" : "warn", "log.stt.in", {
+        provider: r.provider,
+        ms: r.latencyMs,
+        text: r.text || { key: "log.stt.silence" },
+      });
+      res.json(r);
+    } catch (err) {
+      controller.logEvent("error", "log.stt.failed", { message: err.message });
+      res.status(502).json({ error: err.message });
+    }
+  });
+  app.get("/api/stt", (_req, res) => res.json(sttStatus()));
+  app.get("/api/stt/stream", (_req, res) => res.json(streamingStatus()));
+
+  app.get("/api/languages", (_req, res) =>
+    res.json(
+      Object.values(LANGUAGES).map((l) => ({ code: l.code, label: l.label, speechLang: l.speechLang })),
+    ),
+  );
 
   const server = http.createServer(app);
-  const wss = new WebSocketServer({ server });
+  // Нэг port-ыг хоёр socket хуваалцана: "/ws" нь control page-ийг удирдаж, "/ws/stt"
+  // нь микрофоны аудиог speech provider руу зөөнө. Тэдгээрийг upgrade дээр route
+  // хийнэ, учир нь `server`-т bind хийсэн WebSocketServer хоёр path дээр ч хариулж,
+  // аудио socket нь хуудасны control frame-уудыг хүлээж авах ёсгүй.
+  const wss = new WebSocketServer({ noServer: true });
+  const sttWss = new WebSocketServer({ noServer: true });
+
+  server.on("upgrade", (req, socket, head) => {
+    let pathname;
+    try {
+      pathname = new URL(req.url, `http://${req.headers.host || "localhost"}`).pathname;
+    } catch {
+      socket.destroy();
+      return;
+    }
+    if (pathname === "/ws/stt") {
+      sttWss.handleUpgrade(req, socket, head, (ws, r) => sttWss.emit("connection", ws, r));
+    } else if (pathname === "/ws") {
+      wss.handleUpgrade(req, socket, head, (ws) => wss.emit("connection", ws));
+    } else {
+      socket.destroy();
+    }
+  });
 
   const broadcast = (type, payload) => {
     const msg = JSON.stringify({ type, payload });
@@ -67,6 +131,8 @@ export async function startServer(opts = {}) {
   controller.on("candidates", (p) => broadcast("candidates", p));
   controller.on("pending", (p) => broadcast("pending", p));
   controller.on("tabs", (p) => broadcast("tabs", p));
+  controller.on("lang", (p) => broadcast("lang", p));
+  controller.on("uiLang", (p) => broadcast("uiLang", p));
 
   wss.on("connection", (ws) => {
     ws.send(JSON.stringify({ type: "hello", payload: controller.uiState() }));
@@ -90,12 +156,103 @@ export async function startServer(opts = {}) {
         case "snapshot":
           controller.refreshSnapshot();
           break;
+        case "lang":
+          controller.setLanguage(msg.lang);
+          break;
+        // Зөвхөн дэлгэцэнд: энэ нь Jev, recognizer эсвэл policy руу хэзээ ч хүрэхгүй.
+        // Хуудас үүнийг илгээгээд, server-т байгаа prose дахин render хийгдэхийн тулд state-ээ дахин уншина.
+        case "uiLang":
+          controller.setUiLanguage(msg.uiLang);
+          break;
         case "state":
           ws.send(JSON.stringify({ type: "hello", payload: controller.uiState() }));
           break;
         default:
           break;
       }
+    });
+  });
+
+  // Микрофоны аудио орж, interim болон final transcript гарна. Хуудас энэ socket-той
+  // ярьдаг тул API key түүнд хэзээ ч хүрэхгүй: server provider-ийн socket-ыг нээж,
+  // handshake дээр key-г танилцуулж, frame-уудыг хоёр тийш нь дамжуулна.
+  //
+  // Browser өөрийн WebSocket дээр Authorization header тавьж чаддаггүй нь
+  // энэ hop яагаад байгаагийн бүх шалтгаан.
+  sttWss.on("connection", (ws, req) => {
+    const key = apiKey();
+    if (!key) {
+      ws.send(JSON.stringify({ type: "error", code: "not_configured", message: "No STT key configured on the server." }));
+      ws.close(1011, "no key");
+      return;
+    }
+    let lang = controller.lang;
+    try {
+      const asked = new URL(req.url, "http://localhost").searchParams.get("lang");
+      if (isSupportedLang(asked)) lang = asked;
+    } catch { /* controller-ийн хэлийг хэвээр үлдээнэ */ }
+
+    const upstream = new WebSocket(streamSocketUrl(lang), {
+      headers: { Authorization: `Bearer ${key}` },
+    });
+
+    const relay = (msg) => {
+      if (ws.readyState === 1) ws.send(JSON.stringify(msg));
+    };
+
+    // Provider-ийн handshake дуусахаас өмнө аудио ирж болно — socket нээгдэнгүүт
+    // хуудас ярьж эхэлдэг. Эхний үеийг CONNECTING socket руу хаяхын оронд
+    // тэдгээр frame-ийг барьж байна.
+    const pending = [];
+
+    upstream.on("open", () => {
+      for (const [data, isBinary] of pending) upstream.send(data, { binary: isBinary });
+      pending.length = 0;
+      controller.logEvent("info", "log.stream.open", { lang });
+    });
+    // Provider зөвхөн text frame ярьдаг (interim / final / error JSON) тул
+    // тэдгээрийг хөндөлгүй дамжуулна — хэрхэн render хийх нь хуудсанд хамаарна.
+    upstream.on("message", (data, isBinary) => {
+      if (ws.readyState === 1) ws.send(data, { binary: isBinary });
+    });
+    // Handshake дээрх татгалзалт (буруу key, rate эсвэл concurrency limit, spend cap)
+    // хэзээ ч socket болдоггүй: provider оронд нь HTTP status-аар хариулна.
+    // Жинхэнэ шалтгааныг хуудас харуулахын тулд тэр body-г уншина.
+    upstream.on("unexpected-response", (_req, res) => {
+      let body = "";
+      res.on("data", (c) => (body += c));
+      res.on("end", () => {
+        let message = `HTTP ${res.statusCode}`;
+        try {
+          const parsed = JSON.parse(body);
+          message = parsed.message || parsed.error || message;
+        } catch {
+          if (body.trim()) message = `${message}: ${body.trim().slice(0, 200)}`;
+        }
+        controller.logEvent("error", "log.stream.refused", { message });
+        relay({ type: "error", code: String(res.statusCode), message });
+        if (ws.readyState === 1) ws.close(1011, "upstream refused");
+      });
+    });
+    upstream.on("error", (err) => {
+      controller.logEvent("error", "log.stream.failed", { message: err.message });
+      relay({ type: "error", code: "stream_failed", message: err.message });
+    });
+    upstream.on("close", () => {
+      if (ws.readyState === 1) ws.close(1000, "upstream closed");
+    });
+
+    // Аудио frame-уудыг шууд дамжуулна: provider нь raw 16 kHz mono
+    // 16-bit PCM авч, төлбөр тооцох хугацааг тэр byte-үүдээс гаргана.
+    ws.on("message", (data, isBinary) => {
+      if (upstream.readyState === 1) upstream.send(data, { binary: isBinary });
+      else if (upstream.readyState === WebSocket.CONNECTING) pending.push([data, isBinary]);
+    });
+    ws.on("close", () => {
+      if (upstream.readyState === 1) upstream.close();
+    });
+    ws.on("error", () => {
+      if (upstream.readyState === 1) upstream.close();
     });
   });
 
@@ -106,7 +263,14 @@ export async function startServer(opts = {}) {
     console.warn(`WARNING: listening on ${host} — anyone who can reach this port can control the browser and spend API credits.`);
   }
   console.log(`\nvoice-browser ready → open ${url} in Chrome (mic needs Chrome/Edge)`);
-  console.log(`model ${MODEL} · controlled window: ${opts.cdp ? "attached via CDP" : opts.headless ? "headless" : "headed Chromium"}\n`);
+  const stt = sttStatus();
+  console.log(`speech-to-text: ${stt.detail}`);
+  console.log(stt.streaming
+    ? `speech-to-text streaming: ${stt.streamUrl} (interim text as you speak)`
+    : "speech-to-text streaming: unavailable (batch only)");
+  console.log(
+    `model ${MODEL} · controlled window: ${opts.cdp ? "attached via CDP" : opts.headless ? "headless" : "headed Chromium"} · speech: ${getLang(controller.lang).label} (${getLang(controller.lang).speechLang}) · interface: ${UI_LANGUAGES[controller.uiLang].label}\n`,
+  );
 
   const shutdown = async () => {
     await controller.close();

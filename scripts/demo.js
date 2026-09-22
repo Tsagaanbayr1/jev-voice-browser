@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 /**
- * Demo / end-to-end test without a microphone.
+ * Микрофонгүй demo / end-to-end тест.
  *
- * Replays scripted commands word by word (simulating partial speech transcripts) through the
- * SAME controller the live server uses, against real websites, and asserts the resulting URLs /
- * page state. Prints per-step Jev latency and how early (at which word) the browser acted.
+ * Скриптээр өгөгдсөн тушаалуудыг үг үгээр (хэсэгчилсэн ярианы transcript-ийг дуурайж) амьд
+ * серверийн ашигладаг ЯГ ТЭР controller-оор, бодит вэбсайтууд руу дахин тоглуулж, үр дүнгийн URL /
+ * хуудасны төлөвийг шалгана. Алхам бүрийн Jev latency ба хөтөч хэр эрт (аль үгэнд) ажилласныг хэвлэнэ.
  *
- *   npm run demo            # headed (watch it happen)
- *   npm run demo:ci         # headless, exits non-zero on failure
+ *   npm run demo            # headed (ажиллаж байгааг харна)
+ *   npm run demo:ci         # headless, алдаа гарвал тэг биш утгаар гарна
  *   node scripts/demo.js --headless --word-ms 250 --only 1,2,3
  */
 import os from "node:os";
@@ -52,13 +52,13 @@ async function waitFor(fn, { timeout = 10000, every = 150 } = {}) {
 const url = (b) => b.page?.url() || "";
 const scrollY = (b) => b.page.evaluate(() => Math.round(window.scrollY)).catch(() => 0);
 
-/** The scripted demo. `expect` returns truthy when the step succeeded. */
+/** Скриптээр өгөгдсөн demo. Алхам амжилттай бол `expect` truthy буцаана. */
 const STEPS = [
   { say: "go to wikipedia", expect: (b) => url(b).includes("wikipedia.org") },
   { say: "search for alan turing", expect: (b) => /Alan_Turing|search=alan/i.test(url(b)) },
   { say: "scroll down a bit", expect: async (b) => (await scrollY(b)) > 50 },
   { say: "scroll to the bottom", expect: async (b) => (await scrollY(b)) > 2000 },
-  { say: "scroll up a page", expect: async (b) => (await scrollY(b)) < 900_000 }, // just must execute
+  { say: "scroll up a page", expect: async (b) => (await scrollY(b)) < 900_000 }, // зөвхөн гүйцэтгэгдэх ёстой
   { say: "go back", expect: (b) => url(b).includes("wikipedia.org") && !/Alan_Turing/.test(url(b)) },
   { say: "open example dot com", expect: (b) => url(b).includes("example.com") },
   { say: "click the more information link", expect: (b) => url(b).includes("iana.org") },
@@ -66,16 +66,16 @@ const STEPS = [
   { say: "click the new link", expect: (b) => url(b).includes("news.ycombinator.com/newest") },
   {
     say: "click on a link please",
-    // Ambiguous on purpose: either Jev is confident and clicks something, or it shows numbered
-    // candidates and we answer with a number.
+    // Зориуд тодорхойгүй: нэг бол Jev итгэлтэйгээр ямар нэгэн зүйл дээр дарна, эсвэл дугаарласан
+    // candidate-уудыг харуулж, бид дугаараар хариулна.
     followUpOnCandidates: "the first one",
     expect: (b) => !/news\.ycombinator\.com\/newest$/.test(url(b)),
   },
   { say: "search duckduckgo for typesafe jev", expect: (b) => /duckduckgo\.com\/\?q=typesafe(%20|\+)jev/.test(url(b)) },
   { say: "open a new tab", expect: (b) => b.pages.length === 2 },
   { say: "close this tab", expect: (b) => b.pages.length === 1 },
-  // Two commands in one breath: the first executes as soon as it is complete, the remaining
-  // words become a new command.
+  // Нэг амьсгалаар хоёр тушаал: эхнийх нь бүрэн болмогц гүйцэтгэгдэж, үлдсэн
+  // үгнүүд шинэ тушаал болно.
   { say: "go to example dot com and click the more information link", expect: (b) => url(b).includes("iana.org"), multi: true },
   { say: "so anyway I think we should get lunch", expectNoAction: true, expect: () => true },
 ];
@@ -99,7 +99,7 @@ async function main() {
     await sleep(500);
   }
 
-  // ---- summary
+  // ---- хураангуй
   console.log("\n" + "─".repeat(100));
   console.log("step  result  acted@word  jev(ms)  word→decision(ms)  word→done(ms)  phrase");
   for (const r of results) {
@@ -128,8 +128,8 @@ async function main() {
 }
 
 /**
- * Feed a phrase word by word as partial transcripts; resolve when the controller acts
- * (or shows candidates / asks for confirmation), then check the expectation.
+ * Хэллэгийг үг үгээр хэсэгчилсэн transcript болгон өгнө; controller ажиллах үед
+ * (эсвэл candidate харуулах / баталгаа асуух үед) дуусаж, дараа нь хүлээлтийг шалгана.
  */
 async function runStep(step, no, controller, browser) {
   const words = step.say.split(" ");

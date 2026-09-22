@@ -1,7 +1,7 @@
 /**
- * Lightweight feedback overlay injected into every controlled page (context.addInitScript).
- * Exposes window.__vb = { highlight, toast, candidates, clearCandidates }.
- * Self-contained: runs in the page, no closures over Node scope.
+ * Удирдаж буй хуудас бүрт шахдаг хөнгөн feedback overlay (context.addInitScript).
+ * window.__vb = { highlight, toast, candidates, clearCandidates }-ийг ил гаргана.
+ * Өөртөө бүрэн агуулагдсан: хуудас дотор ажиллана, Node scope руу closure байхгүй.
  */
 export function installOverlay() {
   if (window.__vb) return;

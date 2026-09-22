@@ -1,9 +1,9 @@
 /**
- * Integration test against the REAL Jev API: given a page snapshot fixture and a transcript,
- * does the (Jev answers -> policy) pipeline produce the expected intent / target / decision?
+ * БОДИТ Jev API руу чиглэсэн integration test: хуудасны snapshot fixture болон транскрипт өгөгдсөн
+ * үед (Jev answers -> policy) pipeline нь хүлээгдэж буй intent / target / decision-ыг гаргаж байна уу?
  *
- * Prints a pass-rate report and per-call latency. Requires TYPESAFE_API_KEY (or JEV_API_KEY);
- * skips otherwise. Cost of a full run: well under one cent.
+ * Pass rate тайлан болон дуудлага бүрийн latency-г хэвлэнэ. TYPESAFE_API_KEY (эсвэл JEV_API_KEY);
+ * үгүй бол skip. Бүтэн гүйлтийн зардал: нэг центеэс хамаагүй доогуур.
  */
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
@@ -17,8 +17,8 @@ import { MODEL } from "../../src/constants.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixture = (name) => JSON.parse(fs.readFileSync(path.join(__dirname, "..", "fixtures", `${name}.json`), "utf8"));
 
-// A realistic search-results page (DuckDuckGo chrome captured live; result links written by hand
-// because results render client-side and don't appear in headless captures).
+// Бодит хайлтын үр дүнгийн хуудас (DuckDuckGo-гийн chrome-ыг шууд capture хийсэн; үр дүнгийн холбоосыг
+// гараар бичсэн, учир нь үр дүн client-side render болдог тул headless capture-д харагддаггүй).
 const SEARCH_RESULTS = {
   url: "https://duckduckgo.com/?q=jev+typesafe",
   title: "jev typesafe at DuckDuckGo",
@@ -63,12 +63,12 @@ const FORM_PAGE = {
 };
 
 /**
- * Each case: transcript + snapshot + expectations on Jev's raw answers and/or the policy result.
- *   intent:   expected `intent.choice`
- *   target:   expected `target.choice` (optional)
- *   decision: expected policy decision (optional)
- *   text:     expected verbatim text_span (optional)
- *   final:    treat as a final utterance (default true so `complete` doesn't gate)
+ * Case бүр: транскрипт + snapshot + Jev-ийн түүхий answers болон/эсвэл policy үр дүнгийн хүлээлт.
+ *   intent:   хүлээгдэж буй `intent.choice`
+ *   target:   хүлээгдэж буй `target.choice` (заавал биш)
+ *   decision: хүлээгдэж буй policy decision (заавал биш)
+ *   text:     хүлээгдэж буй яг тэр text_span (заавал биш)
+ *   final:    эцсийн utterance гэж үзнэ (анхдагч нь true, ингэснээр `complete` gate болохгүй)
  */
 const CASES = [
   { name: "scroll a bit", transcript: "scroll down a bit", snapshot: "wikipedia-article", intent: "scroll_down", decision: "act", amount: "little" },
@@ -129,7 +129,7 @@ for (const c of CASES) {
   });
 }
 
-test("integration pass-rate report", { skip: !hasApiKey() }, () => {
+test("integration pass rate тайлан", { skip: !hasApiKey() }, () => {
   const passed = results.filter((r) => r.ok).length;
   const lat = results.map((r) => r.latency).sort((a, b) => a - b);
   const p50 = lat[Math.floor(lat.length / 2)];

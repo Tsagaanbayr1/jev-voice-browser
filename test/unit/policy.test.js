@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { evaluatePolicy, topChoices } from "../../src/policy.js";
 import { T, SILENCE_COMPLETE_MS, PAYLOAD_SILENCE_MS } from "../../src/constants.js";
 
-/** Build a mocked Jev answer set. */
+/** Mock хийсэн Jev хариултын багц байгуул. */
 function answers(over = {}) {
   const choice = (c, conf = 0.95, extra = {}) => ({ type: "choice", choice: c, confidence: conf, probabilities: { [c]: conf, none: 1 - conf, ...extra } });
   const base = {
@@ -33,7 +33,7 @@ const snapshot = {
 const candidates = { text: [], url: [] };
 const ch = (c, conf, extra) => ({ type: "choice", choice: c, confidence: conf, probabilities: { [c]: conf, ...extra } });
 
-test("acts on a confident, complete, non-destructive command", () => {
+test("итгэлтэй, бүрэн, destructive биш command дээр act хийдэг", () => {
   const r = evaluatePolicy({ answers: answers(), candidates, snapshot });
   assert.equal(r.decision, "act");
   assert.equal(r.action.type, "scroll_down");
@@ -41,32 +41,32 @@ test("acts on a confident, complete, non-destructive command", () => {
   assert.ok(r.reasons.every((x) => x.pass));
 });
 
-test("ignores when is_command is below threshold", () => {
+test("is_command threshold-оос доош бол ignore хийдэг", () => {
   const r = evaluatePolicy({ answers: answers({ is_command: { noul: T.isCommand - 0.1 } }), candidates, snapshot });
   assert.equal(r.decision, "ignore");
   assert.equal(r.reasons.find((x) => x.name === "is_command").pass, false);
 });
 
-test("waits when intent confidence is low or intent is none", () => {
+test("intent-ийн confidence бага эсвэл intent нь none бол wait хийдэг", () => {
   assert.equal(evaluatePolicy({ answers: answers({ intent: ch("scroll_down", T.intentConfidence - 0.05) }), candidates, snapshot }).decision, "wait");
   assert.equal(evaluatePolicy({ answers: answers({ intent: ch("none", 0.99) }), candidates, snapshot }).decision, "wait");
 });
 
-test("waits for completeness on partial speech, but silence or a final result bypasses it", () => {
+test("partial яриа дээр completeness-ийг хүлээдэг ч чимээгүй байдал эсвэл final үр дүн түүнийг тойрч гардаг", () => {
   const a = answers({ intent: ch("navigate_url", 0.9), complete: { noul: 0.2 }, site: ch("wikipedia", 0.9) });
   assert.equal(evaluatePolicy({ answers: a, candidates, snapshot }).decision, "wait");
   assert.equal(evaluatePolicy({ answers: a, candidates, snapshot, silentMs: SILENCE_COMPLETE_MS }).decision, "act");
   assert.equal(evaluatePolicy({ answers: a, candidates, snapshot, isFinal: true }).decision, "act");
 });
 
-test("the same completeness threshold applies to every intent (no early scroll on 'scroll to the')", () => {
+test("ижил completeness threshold intent бүрд үйлчилдэг ('scroll to the' дээр эрт scroll хийхгүй)", () => {
   const a = answers({ intent: ch("scroll_down", 0.95), complete: { noul: T.complete - 0.05 } });
   assert.equal(evaluatePolicy({ answers: a, candidates, snapshot }).decision, "wait");
   const b = answers({ intent: ch("scroll_down", 0.95), complete: { noul: T.complete + 0.05 } });
   assert.equal(evaluatePolicy({ answers: b, candidates, snapshot }).decision, "act");
 });
 
-test("navigate: spoken domain beats site list; known site maps to its home URL; unknown waits", () => {
+test("navigate: хэлсэн domain сайтын жагсаалтыг дийлдэг; мэдэгдэх сайт home URL руугаа зурагддаг; танихгүй нь wait хийдэг", () => {
   const a = answers({ intent: ch("navigate_url", 0.95), url_span: ch("example.com", 0.9) });
   const r = evaluatePolicy({ answers: a, candidates: { text: [], url: ["example.com"] }, snapshot });
   assert.equal(r.action.url, "https://example.com");
@@ -78,7 +78,7 @@ test("navigate: spoken domain beats site list; known site maps to its home URL; 
   assert.equal(evaluatePolicy({ answers: c, candidates, snapshot }).decision, "wait");
 });
 
-test("search: named site template, else on-page search box, else default engine; query copied verbatim", () => {
+test("search: нэрлэсэн сайтын template, эс бөгөөс хуудсан дээрх хайлтын талбар, эс бөгөөс default engine; query үгчлэн хуулагддаг", () => {
   const cands = { text: ["alan turing", "for alan turing"], url: [] };
   const a = answers({ intent: ch("search_web", 0.95), site: ch("youtube", 0.9), text_span: ch("alan turing", 0.9) });
   assert.equal(evaluatePolicy({ answers: a, candidates: cands, snapshot, isFinal: true }).action.url, "https://www.youtube.com/results?search_query=alan%20turing");
@@ -97,13 +97,13 @@ test("search: named site template, else on-page search box, else default engine;
   assert.equal(evaluatePolicy({ answers: d, candidates: cands, snapshot, isFinal: true }).decision, "wait");
 });
 
-test("low-confidence text_span falls back to the heuristic top candidate (never invents text)", () => {
+test("бага confidence-тай text_span эвристикийн top candidate руу fallback хийдэг (текст хэзээ ч зохиодоггүй)", () => {
   const a = answers({ intent: ch("search_web", 0.95), text_span: ch("for alan turing", 0.2, { "alan turing": 0.3 }) });
   const r = evaluatePolicy({ answers: a, candidates: { text: ["alan turing", "for alan turing"], url: [] }, snapshot, isFinal: true });
   assert.equal(r.action.text, "alan turing");
 });
 
-test("click: confident target acts; ambiguous target disambiguates with top candidates", () => {
+test("click: итгэлтэй target act хийдэг; тодорхойгүй target top candidate-уудаар disambiguate хийдэг", () => {
   const a = answers({ intent: ch("click_element", 0.95), target: ch("e03", 0.9, { e01: 0.05 }) });
   const r = evaluatePolicy({ answers: a, candidates, snapshot });
   assert.equal(r.decision, "act");
@@ -119,12 +119,12 @@ test("click: confident target acts; ambiguous target disambiguates with top cand
   assert.equal(rb.pendingIntent.type, "click_element");
 });
 
-test("click with no plausible element waits", () => {
+test("боломжит element-гүй click wait хийдэг", () => {
   const a = answers({ intent: ch("click_element", 0.95), target: ch("none", 0.99, { e01: 0.005 }) });
   assert.equal(evaluatePolicy({ answers: a, candidates, snapshot }).decision, "wait");
 });
 
-test("type: confident target or search-box fallback", () => {
+test("type: итгэлтэй target эсвэл search-box fallback", () => {
   const cands = { text: ["hello world"], url: [] };
   const a = answers({ intent: ch("type_into_field", 0.95), target: ch("none", 0.9), text_span: ch("hello world", 0.9) });
   const r = evaluatePolicy({ answers: a, candidates: cands, snapshot, isFinal: true });
@@ -133,7 +133,7 @@ test("type: confident target or search-box fallback", () => {
   assert.equal(r.action.text, "hello world");
 });
 
-test("destructive element actions require confirmation; confirm/cancel resolve the pending action", () => {
+test("destructive element action-ууд confirmation шаарддаг; confirm/cancel нь pending action-ыг шийддэг", () => {
   const a = answers({ intent: ch("click_element", 0.95), target: ch("e04", 0.95), destructive: { noul: 0.9 } });
   const r = evaluatePolicy({ answers: a, candidates, snapshot });
   assert.equal(r.decision, "confirm");
@@ -146,26 +146,26 @@ test("destructive element actions require confirmation; confirm/cancel resolve t
   assert.equal(no.decision, "cancel");
 });
 
-test("destructive flag does not block navigation or scrolling", () => {
+test("destructive flag нь navigation эсвэл scrolling-ийг хаадаггүй", () => {
   const a = answers({ intent: ch("navigate_url", 0.95), site: ch("github", 0.9), destructive: { noul: 0.9 } });
   assert.equal(evaluatePolicy({ answers: a, candidates, snapshot }).decision, "act");
 });
 
-test("scroll amount maps score levels to little / page / end", () => {
+test("scroll amount нь score түвшнүүдийг little / page / end руу буулгадаг", () => {
   const mk = (score) => answers({ scroll_amount: { score, confidence: 0.9, probabilities: {} } });
   assert.equal(evaluatePolicy({ answers: mk(0.2), candidates, snapshot }).action.amount, "little");
   assert.equal(evaluatePolicy({ answers: mk(1.1), candidates, snapshot }).action.amount, "page");
   assert.equal(evaluatePolicy({ answers: mk(1.8), candidates, snapshot }).action.amount, "end");
 });
 
-test("topChoices excludes none and sorts by probability", () => {
+test("topChoices нь none-ыг хасч, магадлалаар эрэмбэлдэг", () => {
   assert.deepEqual(topChoices({ probabilities: { a: 0.2, none: 0.5, b: 0.3 } }, 2), [
     { id: "b", p: 0.3 },
     { id: "a", p: 0.2 },
   ]);
 });
 
-test("free-text intents wait for a final result or silence, even when `complete` is high", () => {
+test("free-text intent-үүд `complete` өндөр байсан ч final үр дүн эсвэл чимээгүй байдлыг хүлээдэг", () => {
   const cands = { text: ["alan"], url: [] };
   const a = answers({ intent: ch("search_web", 0.99), complete: { noul: 0.95 }, text_span: ch("alan", 0.9) });
   const partial = evaluatePolicy({ answers: a, candidates: cands, snapshot, silentMs: 100 });
@@ -174,7 +174,7 @@ test("free-text intents wait for a final result or silence, even when `complete`
   assert.equal(partial.reasons.find((x) => x.name === "payload_final").pass, false);
   assert.equal(evaluatePolicy({ answers: a, candidates: cands, snapshot, silentMs: PAYLOAD_SILENCE_MS }).decision, "act");
   assert.equal(evaluatePolicy({ answers: a, candidates: cands, snapshot, isFinal: true }).decision, "act");
-  // closed-set intents (navigation / click / scroll) do NOT have this gate
+  // closed-set intent-үүд (navigation / click / scroll) энэ gate-гүй
   const b = answers({ intent: ch("navigate_url", 0.99), complete: { noul: 0.95 }, site: ch("wikipedia", 0.9) });
   assert.equal(evaluatePolicy({ answers: b, candidates, snapshot, silentMs: 0 }).decision, "act");
 });

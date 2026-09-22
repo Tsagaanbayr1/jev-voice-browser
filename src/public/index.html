@@ -17,14 +17,18 @@
   header h1 span{color:var(--accent)}
   .pill{font-size:12px;padding:3px 9px;border-radius:999px;background:var(--panel2);border:1px solid var(--line);color:var(--muted);font-variant-numeric:tabular-nums}
   .pill b{color:var(--text)}
+  header select{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:999px;padding:4px 9px;font-size:12px}
   .spacer{flex:1}
-  main{display:grid;grid-template-columns:1.1fr 1.3fr 1fr;gap:12px;padding:12px 16px;height:calc(100vh - 54px)}
-  .col{display:flex;flex-direction:column;gap:12px;min-height:0}
-  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;min-height:0;display:flex;flex-direction:column}
+  /* текст агуулж болох бүх газарт min-width:0. Grid болон flex хүүхдүүд нь
+     анхдагчаар min-width:auto байдаг тул НЭГ урт тасрахгүй string (percent-encoded
+     URL, урт хэлсэн query) баганаа өргөсгөж, бусад layout-ыг дэлгэцээс түлхдэг. */
+  main{display:grid;grid-template-columns:1.1fr 1.3fr 1fr;gap:12px;padding:12px 16px;height:calc(100vh - 54px);min-width:0;overflow:hidden}
+  .col{display:flex;flex-direction:column;gap:12px;min-height:0;min-width:0}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;min-height:0;min-width:0;display:flex;flex-direction:column;overflow-wrap:anywhere}
   .card h2{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin:0 0 8px;font-weight:600;display:flex;align-items:center;gap:8px}
   .card h2 .r{margin-left:auto;font-weight:400;text-transform:none;letter-spacing:0}
   .grow{flex:1;overflow:auto}
-  #transcript{font-size:26px;font-weight:600;min-height:72px;line-height:1.25;word-break:break-word}
+  #transcript{font-size:26px;font-weight:600;min-height:72px;max-height:34vh;overflow-y:auto;line-height:1.25;word-break:break-word;overflow-wrap:anywhere}
   #transcript.acted{color:var(--green)}
   #transcript .interim{color:var(--muted);font-weight:400}
   .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
@@ -41,14 +45,15 @@
   .fill.win{background:var(--accent)}
   .fill.noul{background:var(--purple)}
   .num{text-align:right;font-variant-numeric:tabular-nums;color:var(--muted)}
-  .verdict{font-size:18px;font-weight:700;padding:8px 10px;border-radius:8px;margin:6px 0 8px;background:var(--panel2);border:1px solid var(--line)}
+  .verdict{font-size:18px;font-weight:700;padding:8px 10px;border-radius:8px;margin:6px 0 8px;background:var(--panel2);border:1px solid var(--line);overflow-wrap:anywhere;max-height:22vh;overflow-y:auto}
   .verdict.act{color:var(--green);border-color:rgba(34,197,94,.4)}
   .verdict.wait{color:var(--accent)}
   .verdict.ignore{color:var(--muted)}
   .verdict.confirm{color:var(--red);border-color:rgba(239,68,68,.4)}
   .verdict.disambiguate{color:var(--blue)}
   table{width:100%;border-collapse:collapse;font-size:12.5px}
-  td,th{padding:3px 6px;text-align:left;border-bottom:1px solid var(--line)}
+  td,th{padding:3px 6px;text-align:left;border-bottom:1px solid var(--line);overflow-wrap:anywhere}
+  table{table-layout:fixed}
   th{color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.06em}
   td.pass{color:var(--green)} td.fail{color:var(--red)}
   .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
@@ -60,10 +65,10 @@
   .el.cand{background:rgba(59,130,246,.18)}
   .el .txt{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .log{font-family:ui-monospace,Menlo,monospace;font-size:12px}
-  .log div{padding:2px 0;border-bottom:1px dashed rgba(255,255,255,.05);white-space:pre-wrap}
+  .log div{padding:2px 0;border-bottom:1px dashed rgba(255,255,255,.05);white-space:pre-wrap;overflow-wrap:anywhere}
   .log .act{color:var(--green)} .log .error{color:var(--red)} .log .warn{color:var(--accent)} .log .debug{color:#6b7280}
   .kv{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;font-size:12.5px}
-  .kv dt{color:var(--muted)} .kv dd{margin:0;word-break:break-all}
+  .kv{min-width:0} .kv dt{color:var(--muted)} .kv dd{margin:0;min-width:0;word-break:break-all;overflow-wrap:anywhere}
   .small{font-size:12px;color:var(--muted)}
   .dot{width:10px;height:10px;border-radius:50%;background:#4b5563;display:inline-block}
   .dot.on{background:var(--red);box-shadow:0 0 0 4px rgba(239,68,68,.25);animation:pulse 1.2s infinite}
@@ -74,248 +79,534 @@
 </head>
 <body>
 <header>
-  <h1><span>●</span> voice-browser <span class="small" style="color:var(--muted);font-weight:400">— Jev decides, Playwright acts</span></h1>
-  <span class="pill">model <b id="model">–</b></span>
-  <span class="pill">last <b id="lat">–</b> ms · p50 <b id="p50">–</b> ms</span>
-  <span class="pill">calls <b id="calls">0</b> · actions <b id="actions">0</b></span>
-  <span class="pill">cost <b id="cost">$0.000000</b></span>
-  <span class="pill" title="average: last spoken word → decision / → action finished (incl. page load)">word→decide <b id="c2d">–</b> ms · →done <b id="c2a">–</b> ms</span>
+  <h1><span>●</span> voice-browser <span class="small" style="color:var(--muted);font-weight:400" id="tagline"></span></h1>
+  <!-- renderStats() бүхэлд нь render хийдэг: амьд тоо болон тэдгээрийн label
+       нэг template-ээс ирдэг тул орчуулагдсан pill хэзээ ч англи хагасыг үлдээхгүй. -->
+  <span class="pill" id="pill-model"></span>
+  <span class="pill" id="pill-latency" data-i18n-title="pill.latencyTitle"></span>
+  <span class="pill" id="pill-stats"></span>
+  <span class="pill" id="pill-cost"></span>
+  <span class="pill" id="pill-timing"></span>
   <div class="spacer"></div>
-  <span class="pill" id="ws">connecting…</span>
+  <!-- Зөвхөн харуулах: энэ нь ярих хэл БИШ. Та монголоор ярьж байхдаа ч
+       англи debug label-уудыг уншиж болно, тиймээс хоёр сонгогч тусдаа. -->
+  <select id="uilang" data-i18n-title="sel.uilang"></select>
+  <span class="pill" id="ws"></span>
 </header>
 
 <main>
-  <!-- LEFT: speech -->
+  <!-- ЗҮҮН: яриа -->
   <div class="col">
     <div class="card">
-      <h2><span class="dot" id="micdot"></span> microphone <span class="r small" id="micstate">off</span></h2>
-      <div id="transcript"><span class="interim">Say something like “go to wikipedia”…</span></div>
+      <h2><span class="dot" id="micdot"></span> <span data-i18n="card.mic">microphone</span> <span class="r small" id="micstate"></span></h2>
+      <div id="transcript"><span class="interim" data-i18n="mic.placeholder"></span></div>
       <div class="row" style="margin-top:10px">
-        <button class="primary" id="micbtn">Start mic</button>
-        <button id="undo">Undo / back</button>
-        <button id="resnap">Re-scan page</button>
+        <button class="primary" id="micbtn"></button>
+        <select id="lang" data-i18n-title="sel.lang">
+          <option value="en">English</option>
+          <option value="mn">Монгол</option>
+        </select>
+        <select id="micsrc" data-i18n-title="sel.micsrc">
+          <option value="auto" data-i18n="opt.stt.auto"></option>
+          <option value="browser" data-i18n="opt.stt.browser"></option>
+          <option value="server" data-i18n="opt.stt.server"></option>
+        </select>
+        <button id="undo" data-i18n="btn.undo"></button>
+        <button id="resnap" data-i18n="btn.rescan"></button>
       </div>
+      <div class="small" id="langnote" style="margin-top:6px"></div>
+      <div class="small" id="sttnote" style="margin-top:4px"></div>
       <form id="cmdform" class="row" style="margin-top:10px">
-        <input type="text" id="cmd" placeholder="…or type a command and press Enter (no-mic fallback)" autocomplete="off" />
-        <button type="submit">Run</button>
+        <input type="text" id="cmd" data-i18n-placeholder="cmd.placeholder" autocomplete="off" />
+        <button type="submit" data-i18n="btn.run"></button>
       </form>
       <div id="pending" class="small" style="margin-top:8px"></div>
-      <div class="small" style="margin-top:6px">Mic needs Chrome/Edge (Web Speech API). Partial transcripts stream to the server as you speak; each update = one Jev request (stale ones are cancelled).</div>
+      <div class="small" style="margin-top:6px" data-i18n="note.micHelp"></div>
     </div>
 
     <div class="card grow">
-      <h2>action log</h2>
+      <h2 data-i18n="card.log">action log</h2>
       <div class="log grow" id="log"></div>
     </div>
   </div>
 
-  <!-- MIDDLE: decision -->
+  <!-- ДУНД: шийдвэр -->
   <div class="col">
     <div class="card grow">
-      <h2>jev decision <span class="r small" id="decmeta">–</span></h2>
-      <div id="verdict" class="verdict wait">waiting for speech…</div>
-      <div class="small" style="margin-bottom:6px">Policy gates (value vs threshold):</div>
-      <table id="reasons"><thead><tr><th>gate</th><th>value</th><th>threshold</th><th>note</th></tr></thead><tbody></tbody></table>
+      <h2><span data-i18n="card.decision">jev decision</span> <span class="r small" id="decmeta">–</span></h2>
+      <div id="verdict" class="verdict wait"></div>
+      <div class="small" style="margin-bottom:6px" data-i18n="gates.title"></div>
+      <table id="reasons"><thead><tr>
+        <th data-i18n="th.gate">gate</th><th data-i18n="th.value">value</th>
+        <th data-i18n="th.threshold">threshold</th><th data-i18n="th.note">note</th>
+      </tr></thead><tbody></tbody></table>
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:12px">
         <div>
-          <h2>intent <span class="r small" id="intentconf"></span></h2>
+          <h2><span data-i18n="card.intent">intent</span> <span class="r small" id="intentconf"></span></h2>
           <div id="intent"></div>
-          <h2 style="margin-top:12px">yes/no signals</h2>
+          <h2 style="margin-top:12px" data-i18n="card.nouls">yes/no signals</h2>
           <div id="nouls"></div>
-          <h2 style="margin-top:12px">scroll amount</h2>
+          <h2 style="margin-top:12px" data-i18n="card.scroll">scroll amount</h2>
           <div id="scroll"></div>
         </div>
         <div>
-          <h2>target element <span class="r small" id="targetconf"></span></h2>
+          <h2><span data-i18n="card.target">target element</span> <span class="r small" id="targetconf"></span></h2>
           <div id="target"></div>
-          <h2 style="margin-top:12px">site</h2>
+          <h2 style="margin-top:12px" data-i18n="card.site">site</h2>
           <div id="site"></div>
-          <h2 style="margin-top:12px">text to type / search (verbatim candidates)</h2>
+          <h2 style="margin-top:12px" data-i18n="card.spans">text to type / search (verbatim candidates)</h2>
           <div id="spans"></div>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- RIGHT: page -->
+  <!-- БАРУУН: page -->
   <div class="col">
     <div class="card">
-      <h2>controlled page <span class="r small" id="tabs"></span></h2>
+      <h2><span data-i18n="card.page">controlled page</span> <span class="r small" id="tabs"></span></h2>
       <dl class="kv">
-        <dt>url</dt><dd id="url" class="mono">–</dd>
-        <dt>title</dt><dd id="title">–</dd>
-        <dt>site</dt><dd id="site-name">–</dd>
-        <dt>search box</dt><dd id="sbox" class="mono">–</dd>
+        <dt data-i18n="kv.url">url</dt><dd id="url" class="mono">–</dd>
+        <dt data-i18n="kv.title">title</dt><dd id="title">–</dd>
+        <dt data-i18n="kv.site">site</dt><dd id="site-name">–</dd>
+        <dt data-i18n="kv.searchbox">search box</dt><dd id="sbox" class="mono">–</dd>
       </dl>
     </div>
     <div class="card grow">
-      <h2>elements sent to Jev <span class="r small" id="elcount"></span></h2>
+      <h2><span data-i18n="card.elements">elements sent to Jev</span> <span class="r small" id="elcount"></span></h2>
       <div class="grow" id="elements"></div>
     </div>
   </div>
 </main>
 
-<script>
-(() => {
-  const $ = (id) => document.getElementById(id);
-  const fmt = (x, d = 2) => (x == null ? "–" : Number(x).toFixed(d));
-  let ws;
-  let ui = null;
-  let hotIds = new Set();
-  let candIds = new Set();
+<!-- MODULE, inline IIFE биш: strings table нь /i18n.js-ээс import хийгддэг тул
+     page болон server нь build step-гүйгээр string бүрийн яг нэг хувийг
+     хуваалцдаг. Энд юу ч model-facing биш — шалтгааныг src/public/i18n.js-ээс үзнэ үү. -->
+<script type="module">
+import { UI_LANGUAGES, resolveUiLang, has, t, makeT, actionLabel } from "/i18n.js";
 
-  // ------------------------------------------------------------ websocket
-  function connect() {
-    ws = new WebSocket(`ws://${location.host}`);
-    ws.onopen = () => { $("ws").textContent = "connected"; };
-    ws.onclose = () => { $("ws").textContent = "disconnected — retrying"; setTimeout(connect, 1000); };
-    ws.onmessage = (ev) => {
-      const { type, payload } = JSON.parse(ev.data);
-      switch (type) {
-        case "hello": ui = payload; renderAll(); break;
-        case "transcript": renderTranscript(payload); break;
-        case "decision": renderDecision(payload); break;
-        case "action": ui = payload.ui; renderStats(); renderSnapshot(); break;
-        case "snapshot": ui && (ui.snapshot = payload); renderSnapshot(); break;
-        case "log": appendLog(payload); break;
-        case "candidates": candIds = new Set((payload || []).map((c) => c.id)); renderSnapshot(); break;
-        case "pending": $("pending").textContent = payload ? `⚠ pending: ${payload.summary} — say "confirm" or "cancel"` : ""; break;
-        case "tabs": $("tabs").textContent = `${payload.length} tab${payload.length === 1 ? "" : "s"}`; break;
-      }
-    };
-  }
-  const send = (obj) => ws && ws.readyState === 1 && ws.send(JSON.stringify(obj));
+const $ = (id) => document.getElementById(id);
+const fmt = (x, d = 2) => (x == null ? "–" : Number(x).toFixed(d));
 
-  // ------------------------------------------------------------ render
-  function renderAll() {
-    $("model").textContent = ui.model;
-    renderStats(); renderSnapshot();
-    $("log").innerHTML = "";
-    (ui.log || []).forEach(appendLog);
-    if (ui.lastDecision) renderDecision(ui.lastDecision);
-    if (ui.pending) $("pending").textContent = `⚠ pending: ${ui.pending.summary} — say "confirm" or "cancel"`;
-  }
-  function renderStats() {
-    const s = ui.stats;
-    $("lat").textContent = s.lastLatencyMs ?? "–";
-    $("p50").textContent = s.p50LatencyMs ?? "–";
-    $("calls").textContent = s.calls;
-    $("actions").textContent = s.actions;
-    $("cost").textContent = "$" + s.costUsd.toFixed(6);
-    $("c2a").textContent = s.avgCommandToActionMs ?? "–";
-    $("c2d").textContent = s.avgDecisionMs ?? "–";
-    $("model").textContent = ui.model;
-  }
-  function renderSnapshot() {
-    const sn = ui && ui.snapshot; if (!sn) return;
-    $("url").textContent = sn.url; $("title").textContent = sn.title || "–"; $("site-name").textContent = sn.site;
-    $("sbox").textContent = sn.searchBoxId || "none";
-    $("elcount").textContent = `${sn.elements.length}`;
-    if (sn.tabs) $("tabs").textContent = `${sn.tabs.length} tab${sn.tabs.length === 1 ? "" : "s"}`;
-    const rows = sn.elements.map((e) => {
-      const cls = hotIds.has(e.id) ? " hot" : candIds.has(e.id) ? " cand" : "";
-      return `<div class="el${cls}"><span class="id">${e.id}</span><span class="role">${e.role}${e.below_fold ? " ↓" : ""}</span><span class="txt" title="${esc(e.href || "")}">${esc(e.text || e.placeholder || "")}</span></div>`;
-    });
-    $("elements").innerHTML = rows.join("");
-    const hot = $("elements").querySelector(".hot"); if (hot) hot.scrollIntoView({ block: "center" });
-  }
-  function renderTranscript(p) {
-    const el = $("transcript");
-    el.className = p.actedOn ? "acted" : "";
-    el.innerHTML = p.final ? esc(p.text) : `${esc(p.text)} <span class="interim">…</span>`;
-  }
-  function bars(container, probs, winner, opts = {}) {
-    const entries = Object.entries(probs || {}).sort((a, b) => b[1] - a[1]).slice(0, opts.max || 7);
-    container.innerHTML = entries.map(([k, p]) => {
-      const win = k === winner;
-      const label = opts.labels ? (opts.labels[k] || k) : k;
-      return `<div class="bar"><span class="lbl${win ? " win" : ""}" title="${esc(label)}">${esc(label)}</span><div class="track"><div class="fill${win ? " win" : ""}${opts.noul ? " noul" : ""}" style="width:${Math.round(p * 100)}%"></div></div><span class="num">${fmt(p)}</span></div>`;
-    }).join("");
-  }
-  function renderDecision(d) {
-    const a = d.answers, pol = d.policy;
-    $("decmeta").textContent = `${d.latencyMs} ms · ${d.questionCount} questions · ${d.usage?.input_tokens ?? "?"} tokens · $${(d.costUsd || 0).toFixed(6)} · ${d.trigger}`;
-    const v = $("verdict"); v.className = `verdict ${pol.decision}`;
-    v.textContent = `${pol.decision.toUpperCase()} — ${pol.summary}` + (d.silentMs > 500 ? ` (silent ${d.silentMs}ms)` : "");
-    $("reasons").querySelector("tbody").innerHTML = (pol.reasons || []).map((r) =>
-      `<tr><td>${esc(r.name)}</td><td class="${r.pass ? "pass" : "fail"}">${esc(String(r.value))}</td><td>${esc(String(r.threshold))}</td><td class="small">${esc(r.note || "")}</td></tr>`).join("");
+// -------------------------------------------------------------- interface хэл
+// Хоёр тэнхлэг, санаатайгаар тусдаа: `currentLang` бол таны ЯРЬДАГ хэл (энэ нь
+// recognizer болон Jev-д өгөх жишээг тогтоодог), `uiLang` бол УНШДАГ хэл чинь.
+// Монголоор ярьдаг хүн англи debug label-уудыг хүсэж болно.
+let uiLang = resolveUiLang(localStorage.getItem("voiceUiLang") || (navigator.language || "").slice(0, 2));
+const uiLangChosen = Boolean(localStorage.getItem("voiceUiLang"));
+// Бүх page-д нэг bound lookup; `tr` нь шилжих бүрд дахин холбогдоно.
+let tr = makeT(uiLang);
 
-    $("intentconf").textContent = `confidence ${fmt(a.intent?.confidence)}`;
-    bars($("intent"), a.intent?.probabilities, a.intent?.choice);
+let ws;
+let ui = null;
+let hotIds = new Set();
+let candIds = new Set();
+let lastDecision = null;
+let logEntries = []; // page-ийн өөрийн mirror, ингэснээр toggle нь түүхийг дахин render хийж чадна
+let lastTranscript = null;
+let pendingNotice = null;
 
-    const labels = {}; (ui?.snapshot?.elements || []).forEach((e) => (labels[e.id] = `${e.id} ${e.text || e.placeholder || e.role}`));
-    labels.none = "none";
-    $("targetconf").textContent = `confidence ${fmt(a.target?.confidence)}`;
-    bars($("target"), a.target?.probabilities, a.target?.choice, { labels, max: 6 });
-    hotIds = new Set(Object.entries(a.target?.probabilities || {}).filter(([k, p]) => k !== "none" && p >= 0.15).map(([k]) => k));
-    renderSnapshot();
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+/** Орчуулагдсан өгүүлбэрийн дотор тодрох ёстой утга. */
+const b = (v) => `<b>${esc(v)}</b>`;
 
-    const nouls = { is_command: a.is_command?.noul, complete: a.complete?.noul, destructive: a.destructive?.noul };
-    $("nouls").innerHTML = Object.entries(nouls).map(([k, p]) =>
-      `<div class="bar"><span class="lbl">${k}</span><div class="track"><div class="fill noul" style="width:${Math.round((p || 0) * 100)}%"></div></div><span class="num">${fmt(p)}</span></div>`).join("");
+// Гурван template нь онцлохын тулд inline <b> агуулдаг — stt.line, stt.lineBrowser
+// болон lang.unsupported — ба innerHTML-ээр бичигддэг; бусад string бүр энгийн
+// текст. Тэдний param-ууд нь дуудсан газартаа escape хийгддэг, `esc` тэгээд байна.
 
-    if (a.scroll_amount) bars($("scroll"), a.scroll_amount.probabilities, String(Math.round(a.scroll_amount.score)), { labels: { 0: "a little", 1: "one page", 2: "to the end" } });
-    bars($("site"), a.site?.probabilities, a.site?.choice, { max: 5 });
+/** String key заасан бүх статик элементийг будах. */
+function sweep() {
+  for (const el of document.querySelectorAll("[data-i18n]")) el.textContent = tr(el.dataset.i18n);
+  for (const el of document.querySelectorAll("[data-i18n-title]")) el.title = tr(el.dataset.i18nTitle);
+  for (const el of document.querySelectorAll("[data-i18n-placeholder]")) el.placeholder = tr(el.dataset.i18nPlaceholder);
+  document.title = tr("app.title");
+  document.documentElement.lang = UI_LANGUAGES[uiLang].htmlLang;
+  $("tagline").textContent = tr("app.tagline");
+}
 
-    let spans = "";
-    if (a.text_span) spans += `<div class="small">text_span</div>` + barsHtml(a.text_span.probabilities, a.text_span.choice);
-    if (a.url_span) spans += `<div class="small">url_span</div>` + barsHtml(a.url_span.probabilities, a.url_span.choice);
-    $("spans").innerHTML = spans || `<div class="small">no text/url candidates in transcript</div>`;
-  }
-  function barsHtml(probs, winner) {
-    const tmp = document.createElement("div"); bars(tmp, probs, winner, { max: 6 }); return tmp.innerHTML;
-  }
-  function appendLog(e) {
-    const div = document.createElement("div");
-    div.className = e.level;
-    const t = new Date(e.t).toLocaleTimeString([], { hour12: false });
-    div.textContent = `${t} ${e.msg}`;
-    const log = $("log"); log.appendChild(div);
-    while (log.children.length > 150) log.removeChild(log.firstChild);
-    log.scrollTop = log.scrollHeight;
-  }
-  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+/** Статик label биш бүгдийг одоогийн хэлээр дахин будах. */
+function renderEverything() {
+  sweep();
+  renderStats();
+  renderSnapshot();
+  renderPending();
+  renderMicStatus();
+  updateSttNote();
+  renderLangNote();
+  renderTranscript(lastTranscript ?? { text: "", final: true, actedOn: false });
+  $("log").innerHTML = "";
+  for (const e of logEntries) appendLog(e);
+  if (lastDecision) renderDecision(lastDecision);
+  else { $("verdict").className = "verdict wait"; $("verdict").textContent = tr("verdict.waiting"); }
+  if (!ui) $("ws").textContent = tr("status.ws.connecting");
+}
 
-  // ------------------------------------------------------------ controls
-  $("cmdform").addEventListener("submit", (ev) => {
-    ev.preventDefault();
-    const text = $("cmd").value.trim(); if (!text) return;
-    send({ type: "command", text });
-    renderTranscript({ text, final: true, actedOn: false });
-    $("cmd").value = "";
+function applyUiLang(code, { remember = true, notify = true } = {}) {
+  uiLang = resolveUiLang(code);
+  tr = makeT(uiLang);
+  if (remember) localStorage.setItem("voiceUiLang", uiLang);
+  $("uilang").value = uiLang;
+  renderEverything();
+  // Серверт хэлж өгнө, ингэснээр түүний startup төлөв болон terminal нь page-тай
+  // санал нийлнэ. Үүнээс model-facing юу ч хамаарахгүй — src/controller.js setUiLanguage-ийг үзнэ үү.
+  if (notify) send({ type: "uiLang", uiLang });
+}
+$("uilang").innerHTML = Object.values(UI_LANGUAGES)
+  .map((l) => `<option value="${esc(l.code)}">${esc(l.label)}</option>`)
+  .join("");
+$("uilang").onchange = () => applyUiLang($("uilang").value);
+
+/** Log entry эсвэл server-ийн барьсан status-ийн render хэлбэр: эхлээд key, дараа нь текст. */
+const renderKeyed = (o) => (o && o.key ? tr(o.key, o.params) : (o?.msg ?? ""));
+
+// ------------------------------------------------------------ websocket
+function connect() {
+  // /ws замыг заавал заана: сервер нь upgrade-ийг өөрөө route хийдэг (энэ
+  // socket-ийг /ws/stt-ээс ялгахын тулд заавал) бөгөөд бусад бүгдийг устгадаг.
+  const proto = location.protocol === "https:" ? "wss:" : "ws:";
+  ws = new WebSocket(`${proto}//${location.host}/ws`);
+  ws.onopen = () => {
+    $("ws").textContent = tr("status.ws.connected");
+    // Хоёр сонголтоо дахин мэдэгдэнэ: reconnect нь шинэ server session.
+    if (langChosen) send({ type: "lang", lang: currentLang });
+    if (uiLangChosen) send({ type: "uiLang", uiLang });
+  };
+  ws.onclose = () => { $("ws").textContent = tr("status.ws.disconnected"); setTimeout(connect, 1000); };
+  ws.onmessage = (ev) => {
+    const { type, payload } = JSON.parse(ev.data);
+    switch (type) {
+      case "hello":
+        ui = payload;
+        // Хадгалсан сонголт байхгүй: энэ page-ийн анхдагчаар дарж бичихийн
+        // оронд серверийн --lang / VOICE_LANG-ийг дагана.
+        if (!langChosen && payload.lang && payload.lang !== currentLang) applyLang(payload.lang, { remember: false });
+        else if (langChosen) send({ type: "lang", lang: currentLang });
+        if (!uiLangChosen && payload.uiLang && payload.uiLang !== uiLang) applyUiLang(payload.uiLang, { remember: false, notify: false });
+        else if (uiLangChosen) send({ type: "uiLang", uiLang });
+        renderAll();
+        break;
+      case "lang":
+        if (payload?.lang && payload.lang !== currentLang) applyLang(payload.lang, { remember: false, notify: false });
+        break;
+      case "uiLang":
+        if (payload?.uiLang && payload.uiLang !== uiLang) applyUiLang(payload.uiLang, { remember: false, notify: false });
+        break;
+      case "transcript": renderTranscript(payload); break;
+      case "decision":
+        lastDecision = payload;
+        renderDecision(payload);
+        break;
+      case "action": ui = payload.ui; renderStats(); renderSnapshot(); break;
+      case "snapshot": ui && (ui.snapshot = payload); renderSnapshot(); break;
+      case "log":
+        logEntries.push(payload);
+        if (logEntries.length > 150) logEntries = logEntries.slice(-150);
+        appendLog(payload);
+        break;
+      case "candidates": candIds = new Set((payload || []).map((c) => c.id)); renderSnapshot(); break;
+      case "pending": renderPending(payload); break;
+      case "tabs": $("tabs").textContent = tabCount(payload.length); break;
+    }
+  };
+}
+const send = (obj) => ws && ws.readyState === 1 && ws.send(JSON.stringify(obj));
+
+// ------------------------------------------------------------ render
+function renderAll() {
+  logEntries = [...(ui.log || [])];
+  lastDecision = ui.lastDecision || null;
+  renderStats(); renderSnapshot();
+  $("log").innerHTML = "";
+  logEntries.forEach(appendLog);
+  if (lastDecision) renderDecision(lastDecision);
+  else { $("verdict").className = "verdict wait"; $("verdict").textContent = tr("verdict.waiting"); }
+  renderPending(ui.pending || null);
+}
+function renderStats() {
+  if (!ui) return;
+  const s = ui.stats;
+  $("pill-model").innerHTML = tr("pill.model", { model: b(ui.model) });
+  $("pill-latency").innerHTML = tr("pill.latency", { last: b(s.lastLatencyMs ?? "–"), p50: b(s.p50LatencyMs ?? "–") });
+  $("pill-stats").innerHTML = tr("pill.stats", { calls: b(s.calls), actions: b(s.actions) });
+  // "$" нь энд биш, template дотор байна.
+  $("pill-cost").innerHTML = tr("pill.cost", { cost: b(s.costUsd.toFixed(6)) });
+  $("pill-timing").innerHTML = tr("pill.timing", { decide: b(s.avgDecisionMs ?? "–"), done: b(s.avgCommandToActionMs ?? "–") });
+}
+const tabCount = (n) => tr(n === 1 ? "tabs.one" : "tabs.other", { n });
+/**
+ * Монгол (эсвэл ASCII бус) query нь урт percent-encoded URL болдог.
+ * Үүнийг decode хийж, богиносгож харуулна; бүтэн утга нь tooltip-д үлдэнэ.
+ */
+function prettyUrl(u, max = 140) {
+  let s = String(u || "");
+  try { s = decodeURI(s); } catch { /* муу escape: байгаагаар нь харуулна */ }
+  return s.length > max ? s.slice(0, max) + "…" : s;
+}
+
+function renderSnapshot() {
+  const sn = ui && ui.snapshot; if (!sn) return;
+  $("url").textContent = prettyUrl(sn.url); $("url").title = sn.url;
+  $("title").textContent = sn.title || "–"; $("title").title = sn.title || "";
+  $("site-name").textContent = sn.site;
+  $("sbox").textContent = sn.searchBoxId || tr("labels.none");
+  $("elcount").textContent = `${sn.elements.length}`;
+  if (sn.tabs) $("tabs").textContent = tabCount(sn.tabs.length);
+  const rows = sn.elements.map((e) => {
+    const cls = hotIds.has(e.id) ? " hot" : candIds.has(e.id) ? " cand" : "";
+    return `<div class="el${cls}"><span class="id">${e.id}</span><span class="role">${e.role}${e.below_fold ? " ↓" : ""}</span><span class="txt" title="${esc(e.href || "")}">${esc(e.text || e.placeholder || "")}</span></div>`;
   });
-  $("undo").onclick = () => send({ type: "undo" });
-  $("resnap").onclick = () => send({ type: "snapshot" });
+  $("elements").innerHTML = rows.join("");
+  const hot = $("elements").querySelector(".hot"); if (hot) hot.scrollIntoView({ block: "center" });
+}
+function renderTranscript(p) {
+  lastTranscript = p;
+  const el = $("transcript");
+  el.className = p.actedOn ? "acted" : "";
+  if (!p.text) { el.innerHTML = `<span class="interim">${esc(tr("mic.placeholder"))}</span>`; return; }
+  el.innerHTML = p.final ? esc(p.text) : `${esc(p.text)} <span class="interim">…</span>`;
+}
+/** Pending-destructive мэдэгдэл. Үйлдэл нь render хийгддэг, дахин иш татагддаггүй. */
+function renderPending(p) {
+  pendingNotice = p || null;
+  $("pending").textContent = p
+    ? tr("pending.notice", { action: p.action ? actionLabel(p.action, uiLang) : p.summary })
+    : "";
+}
+function bars(container, probs, winner, opts = {}) {
+  const entries = Object.entries(probs || {}).sort((a, b) => b[1] - a[1]).slice(0, opts.max || 7);
+  container.innerHTML = entries.map(([k, p]) => {
+    const win = k === winner;
+    const label = opts.labels ? (opts.labels[k] || k) : k;
+    return `<div class="bar"><span class="lbl${win ? " win" : ""}" title="${esc(label)}">${esc(label)}</span><div class="track"><div class="fill${win ? " win" : ""}${opts.noul ? " noul" : ""}" style="width:${Math.round(p * 100)}%"></div></div><span class="num">${fmt(p)}</span></div>`;
+  }).join("");
+}
+function renderDecision(d) {
+  const a = d.answers, pol = d.policy;
+  $("decmeta").textContent = tr("dec.meta", {
+    ms: d.latencyMs, n: d.questionCount, tokens: d.usage?.input_tokens ?? "?",
+    // `trigger` болон `decision` нь identifier-ууд, monospace маягийн текстээр байгаагаар нь харуулна.
+    cost: (d.costUsd || 0).toFixed(6), trigger: d.trigger,
+  });
+  const v = $("verdict"); v.className = `verdict ${pol.decision}`;
+  const summary = pol.summaryKey ? tr(pol.summaryKey.key, pol.summaryKey.params) : pol.summary;
+  v.textContent = `${pol.decision.toUpperCase()} — ${summary}` + (d.silentMs > 500 ? tr("dec.silent", { ms: d.silentMs }) : "");
+  // Gate-ийн НЭРҮҮД байгаагаараа үлдэнэ: тэдгээр нь constants.js дахь англи
+  // question id-уудтай 1:1 харгалзана, энэ бол хүснэгтийн бүх утга. Зөвхөн note нь prose.
+  $("reasons").querySelector("tbody").innerHTML = (pol.reasons || []).map((r) =>
+    `<tr><td>${esc(r.name)}</td><td class="${r.pass ? "pass" : "fail"}">${esc(String(r.value))}</td><td>${esc(String(r.threshold))}</td><td class="small">${esc(r.noteKey ? tr(r.noteKey.key, r.noteKey.params) : (r.note || ""))}</td></tr>`).join("");
 
-  // ------------------------------------------------------------ speech
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  let rec = null, micOn = false, utteranceBase = 0;
-  function startMic() {
-    if (!SR) { alert("Web Speech API not available. Use Chrome or Edge, or type commands below."); return; }
-    rec = new SR();
-    rec.continuous = true; rec.interimResults = true; rec.lang = "en-US"; rec.maxAlternatives = 1;
-    rec.onresult = (ev) => {
-      // Results before ev.resultIndex are finished. Each result index is a distinct utterance.
-      for (let i = ev.resultIndex; i < ev.results.length; i++) {
-        const r = ev.results[i];
-        const text = r[0].transcript;
-        send({ type: "transcript", text, final: r.isFinal, utteranceId: `u${utteranceBase}-${i}` });
-      }
-    };
-    rec.onerror = (e) => { $("micstate").textContent = "error: " + e.error; if (e.error === "not-allowed") stopMic(); };
-    rec.onend = () => { if (micOn) { utteranceBase += 1; try { rec.start(); } catch {} } };
-    rec.start();
-    micOn = true; $("micdot").classList.add("on"); $("micstate").textContent = "listening"; $("micbtn").textContent = "Stop mic"; $("micbtn").classList.remove("primary");
-  }
-  function stopMic() {
-    micOn = false; try { rec && rec.stop(); } catch {}
-    $("micdot").classList.remove("on"); $("micstate").textContent = "off"; $("micbtn").textContent = "Start mic"; $("micbtn").classList.add("primary");
-  }
-  $("micbtn").onclick = () => (micOn ? stopMic() : startMic());
+  $("intentconf").textContent = tr("conf.intent", { p: fmt(a.intent?.confidence) });
+  bars($("intent"), a.intent?.probabilities, a.intent?.choice);
 
-  connect();
-})();
+  const labels = {}; (ui?.snapshot?.elements || []).forEach((e) => (labels[e.id] = `${e.id} ${e.text || e.placeholder || e.role}`));
+  labels.none = tr("labels.none");
+  $("targetconf").textContent = tr("conf.target", { p: fmt(a.target?.confidence) });
+  bars($("target"), a.target?.probabilities, a.target?.choice, { labels, max: 6 });
+  hotIds = new Set(Object.entries(a.target?.probabilities || {}).filter(([k, p]) => k !== "none" && p >= 0.15).map(([k]) => k));
+  renderSnapshot();
+
+  const nouls = { is_command: a.is_command?.noul, complete: a.complete?.noul, destructive: a.destructive?.noul };
+  $("nouls").innerHTML = Object.entries(nouls).map(([k, p]) =>
+    `<div class="bar"><span class="lbl">${k}</span><div class="track"><div class="fill noul" style="width:${Math.round((p || 0) * 100)}%"></div></div><span class="num">${fmt(p)}</span></div>`).join("");
+
+  if (a.scroll_amount) {
+    const amounts = { 0: tr("scroll.little"), 1: tr("scroll.page"), 2: tr("scroll.end") };
+    bars($("scroll"), a.scroll_amount.probabilities, String(Math.round(a.scroll_amount.score)), { labels: amounts });
+  }
+  bars($("site"), a.site?.probabilities, a.site?.choice, { max: 5 });
+
+  let spans = "";
+  if (a.text_span) spans += `<div class="small">text_span</div>` + barsHtml(a.text_span.probabilities, a.text_span.choice);
+  if (a.url_span) spans += `<div class="small">url_span</div>` + barsHtml(a.url_span.probabilities, a.url_span.choice);
+  $("spans").innerHTML = spans || `<div class="small">${esc(tr("spans.none"))}</div>`;
+}
+function barsHtml(probs, winner) {
+  const tmp = document.createElement("div"); bars(tmp, probs, winner, { max: 6 }); return tmp.innerHTML;
+}
+function appendLog(e) {
+  const div = document.createElement("div");
+  div.className = e.level; // level нь CSS class болж давхар ажилладаг — хэзээ ч орчуулагдахгүй
+  const at = new Date(e.t).toLocaleTimeString([], { hour12: false });
+  // Percent-encoded URL-уудыг decode хийнэ, ингэснээр монгол query үгс мэт уншигдана.
+  let msg = renderKeyed(e);
+  try { msg = decodeURI(msg); } catch { /* муу escape: байгаагаар нь log хийнэ */ }
+  div.textContent = `${at} ${msg}`;
+  div.title = msg;
+  const log = $("log"); log.appendChild(div);
+  while (log.children.length > 150) log.removeChild(log.firstChild);
+  log.scrollTop = log.scrollHeight;
+}
+
+// ------------------------------------------------------------ удирдлага
+$("cmdform").addEventListener("submit", (ev) => {
+  ev.preventDefault();
+  const text = $("cmd").value.trim(); if (!text) return;
+  send({ type: "command", text });
+  renderTranscript({ text, final: true, actedOn: false });
+  $("cmd").value = "";
+});
+$("undo").onclick = () => send({ type: "undo" });
+$("resnap").onclick = () => send({ type: "snapshot" });
+
+// ------------------------------------------------------------ ярих хэл
+// Сонгогч нь хоёр зүйлийг удирддаг: recognizer ямар хэл транскриб хийх, мөн
+// Jev-д аль хэлийн жишээ өгөгдөх (сервер рүү илгээгддэг).
+const SPEECH_LANG = { en: "en-US", mn: "mn-MN" };
+const speechLangFor = (code) => SPEECH_LANG[code] || "en-US";
+// Хадгалсан сонголт давамгайлна; эс бөгөөс серверийн анхдагч нь "hello"-той хамт ирнэ.
+const langChosen = Boolean(localStorage.getItem("voiceLang"));
+let currentLang = localStorage.getItem("voiceLang") || "en";
+$("lang").value = currentLang;
+
+// Hint нь ЮУ ХЭЛЭХИЙН жишээ тул ярих хэлийг дагадаг, interface хэлийг биш —
+// тиймээс `tr` биш `t`-г currentLang-тай хамт.
+function renderLangNote() { $("langnote").innerHTML = has(currentLang, `hint.${currentLang}`) ? t(currentLang, `hint.${currentLang}`) : ""; }
+function applyLang(code, { restartMic = true, remember = true, notify = true } = {}) {
+  currentLang = code;
+  if (remember) localStorage.setItem("voiceLang", code);
+  $("lang").value = code;
+  renderLangNote();
+  updateSttNote();
+  if (notify) send({ type: "lang", lang: code });
+  // Recognizer-ийн хэл start() дээр тогтдог тул солихын тулд дахин эхлүүлнэ.
+  if (restartMic && micOn) { stopMic(); startMic(); }
+}
+$("lang").onchange = () => applyLang($("lang").value);
+
+// ------------------------------------------------------------ яриа
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec = null, micOn = false, utteranceBase = 0;
+
+// Mic status мөр нь KEY (recorder.js нь {key, params} мэдэгддэг) эсвэл page-ийн
+// түвшний төлөв. Үүнийг энд барих нь хэл солиход байрандаа дахин будах боломж олгоно.
+let micStatus = { key: "stt.rec.off" };
+function setMicStatus(status) { micStatus = status; renderMicStatus(); }
+function renderMicStatus() {
+  $("micstate").textContent = typeof micStatus === "string" ? tr(micStatus) : tr(micStatus.key, micStatus.params);
+  $("micbtn").textContent = tr(micOn ? "btn.stopMic" : "btn.startMic");
+  $("micbtn").classList.toggle("primary", !micOn);
+}
+
+// Сервер талын STT (Duudlaga Flow). Streaming-тэй үед interim текст ярьж
+// байх хооронд ирдэг; үгүй бол recorder.js нь ярихаа болиход utterance-ийг
+// тасалж, бүх clip дараа нь транскриб хийгддэг.
+let sttInfo = { available: false, streaming: false, detail: null };
+let serverRec = null;
+function updateSttNote() {
+  const willUse = useServerStt();
+  const provider = willUse ? sttInfo.provider : tr("stt.provider.browser");
+  // Тохируулсан: `detail` нь endpoint URL — data. Тохируулаагүй: энэ нь
+  // өгүүлбэр, өгүүлбэр нь key тул аль ч хэлээр уншигдана.
+  const detail = sttInfo.available ? sttInfo.detail : tr("stt.unavailable");
+  const key = willUse ? "stt.line" : "stt.lineBrowser";
+  const params = { provider: esc(provider), detail: esc(detail ?? tr("stt.checking")) };
+  if (willUse) params.how = tr(sttInfo.streaming ? "stt.how.streaming" : "stt.how.batch");
+  $("sttnote").innerHTML = tr(key, params);
+}
+function useServerStt() {
+  const mode = $("micsrc").value;
+  if (mode === "browser") return false;
+  if (mode === "server") return sttInfo.available;
+  return sttInfo.available && currentLang === "mn"; // auto: монгол хэлэнд server STT
+}
+fetch("/api/stt").then((r) => r.json()).then((j) => { sttInfo = j; updateSttNote(); }).catch(() => {});
+$("micsrc").onchange = () => { updateSttNote(); if (micOn) { stopMic(); startMic(); } };
+
+async function startServerMic() {
+  // Эхлээд streaming: interim frame-үүд өгүүлбэрийн дунд ирдэг тул апп
+  // ярихаа болихоос өмнө шийдэж чадна — browser recognizer-ийн өгдөг contract.
+  // Page нь API key-г хэзээ ч хардаггүй: /ws/stt-ийг нээдэг ба сервер нь
+  // key-г upstream Duudlaga-д танилцуулна.
+  if (sttInfo.streaming) {
+    const { StreamingSttRecorder } = await import("/recorder.js");
+    serverRec = new StreamingSttRecorder({
+      lang: () => currentLang,
+      // `text` нь хэсэг биш, өнөөг хүртэлх бүх utterance: interim-үүд сүүлийн
+      // final-аас хойшхи үгсийг хамардаг ба recorder тэдгээрийг нийлүүлдэг.
+      onTranscript: (text, info) => {
+        send({ type: "transcript", text, final: info.final, utteranceId: info.utteranceId });
+        renderTranscript({ text, final: info.final, actedOn: false });
+      },
+      // Recorder нь KEY мэдэгддэг; хэл нь page-ийн мэдэлд.
+      onStatus: (status) => setMicStatus(status),
+      onLevel: (level, speaking) => { $("micdot").classList.toggle("on", speaking); },
+    });
+    await serverRec.start();
+    micOn = true;
+    renderMicStatus();
+    renderLangNote();
+    return;
+  }
+
+  const { ServerSttRecorder } = await import("/recorder.js");
+  serverRec = new ServerSttRecorder({
+    lang: () => currentLang,
+    onTranscript: (text) => {
+      // Нэг бэлэн utterance = нэг final transcript, шууд одоо байгаа
+      // pipeline руу.
+      utteranceBase += 1;
+      send({ type: "transcript", text, final: true, utteranceId: `s${utteranceBase}` });
+      renderTranscript({ text, final: true, actedOn: false });
+    },
+    onStatus: (status) => setMicStatus(status),
+    onLevel: (level, speaking) => { $("micdot").classList.toggle("on", speaking); },
+  });
+  await serverRec.start();
+  micOn = true;
+  renderMicStatus();
+  renderLangNote();
+}
+
+async function startMic() {
+  if (useServerStt()) {
+    try { await startServerMic(); } catch (e) { setMicStatus({ key: "mic.errorMic", params: { message: e.message } }); }
+    return;
+  }
+  if (!SR) { alert(tr("mic.noSpeechApi")); return; }
+  rec = new SR();
+  rec.continuous = true; rec.interimResults = true; rec.lang = speechLangFor(currentLang); rec.maxAlternatives = 1;
+  rec.onresult = (ev) => {
+    // ev.resultIndex-ээс өмнөх result-ууд бэлэн. Result index бүр нь тусдаа utterance.
+    for (let i = ev.resultIndex; i < ev.results.length; i++) {
+      const r = ev.results[i];
+      const text = r[0].transcript;
+      send({ type: "transcript", text, final: r.isFinal, utteranceId: `u${utteranceBase}-${i}` });
+    }
+  };
+  rec.onerror = (e) => {
+    setMicStatus({ key: "mic.error", params: { message: e.error } });
+    if (e.error === "not-allowed") stopMic();
+    // Chrome-ийн speech service бүх хэлийг санал болгодоггүй. Үхсэн микрофон
+    // мэт харагдахын оронд шууд хэлж өгнө.
+    if (e.error === "language-not-supported" || e.error === "bad-grammar") {
+      stopMic();
+      const what = tr(currentLang === "mn" ? "lang.unsupported.mn" : "lang.unsupported.text");
+      $("langnote").innerHTML = tr("lang.unsupported", { tag: esc(speechLangFor(currentLang)), what: esc(what) });
+    }
+  };
+  rec.onend = () => { if (micOn) { utteranceBase += 1; try { rec.start(); } catch {} } };
+  rec.start();
+  micOn = true;
+  $("micdot").classList.add("on");
+  setMicStatus("mic.listening");
+}
+function stopMic() {
+  micOn = false;
+  if (serverRec) { serverRec.stop().catch(() => {}); serverRec = null; }
+  try { rec && rec.stop(); } catch {}
+  $("micdot").classList.remove("on");
+  setMicStatus({ key: "stt.rec.off" });
+}
+$("micbtn").onclick = () => (micOn ? stopMic() : startMic());
+
+// Зөвхөн будах: энэ нь сонголтыг бүртгэх эсвэл мэдэгдэх ёсгүй, эс бөгөөс
+// "hello" ирэхээс өмнө серверийн --lang-ийг дарж бичнэ.
+applyLang(currentLang, { restartMic: false, remember: false, notify: false });
+$("uilang").value = uiLang;
+renderEverything();
+
+connect();
 </script>
 </body>
 </html>
