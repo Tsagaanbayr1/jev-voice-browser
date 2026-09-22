@@ -1,165 +1,181 @@
-# DEMO.md — "I speak, and the browser acts before I finish the sentence"
+# DEMO.md — "Би ярьж байтал хөтөч өгүүлбэр дуусахад нь хийчихдэг"
 
-Target length 3–5 minutes. Two windows on screen: **left** the controlled Chromium window (opened
-by the server), **right** the control page `http://localhost:8787` in your own Chrome (mic lives
-here). Speak in short, natural commands; pause ~1 s between commands.
+Зорилтот урт 3–5 минут. Дэлгэц дээр хоёр цонх: **зүүн талд** удирдагдах Chromium цонх (сервер
+нээсэн), **баруун талд** `http://localhost:8787` удирдлагын хуудас (микрофон энд байна).
+Богино, энгийн командаар ярь; командын хооронд ~1 секунд завсарла.
 
-## Before recording
+> **Хэлний тухай.** Доорх хэлэх мөрүүд монголоор бичигдсэн бөгөөд энэ fork-ийн гол хэрэглээ.
+> Хэрэв англи хэлээр бичлэг хийх бол дэлгэцийн хэлийг `en`, ярих хэлийг `en` болгоод
+> командуудыг [README.en.md](README.en.md) болон `npm run demo`-ийн англи жагсаалтаас ав.
+> Хаалт дотор бичигдсэн тоонууд нь босго (тиймээс хэлнээс үл хамаарна); бар дээрх `0.0x`
+> маягийн хэмжилтүүд англи хэл дээр хэмжигдсэн тул бичлэг хийхдээ дэлгэц дээрх бодит утгыг
+> уншиж хэлээрэй.
+
+## Бичлэг хийхийн өмнө
 
 ```bash
-cd voice-browser
-./run.sh                       # server + controlled window (starts on example.com)
+cd jev-voice-browser
+./run.sh                       # сервер + удирдагдах цонх (example.com дээр эхэлнэ)
 ```
 
-1. Open `http://localhost:8787` in Chrome, click **Start mic**, allow the microphone. The red dot
-   pulses.
-2. Say "scroll down" once to warm up the API connection (first call is ~700 ms, later ones ~300 ms).
-3. Optional dry run without talking: `npm run demo` replays the whole script below headed.
+1. Chrome-оор `http://localhost:8787` нээж, **Start mic** дарж, микрофоны зөвшөөрөл өг. Улаан
+   цэг лугшиж эхэлнэ.
+2. API холболтыг дулаацуулахын тулд нэг удаа "доош гүйлгэ" гэж хэл (эхний дуудлага ~700 мс,
+   дараагийнх ~300 мс).
+3. Ярихгүйгээр шалгах (сонголтоор): `npm run demo` нь доорх бүх скриптийг харагдах байдлаар
+   тоглуулна.
 
-If the room is noisy, keep the mic close; the `is_command` gate ignores side talk anyway — that is
-a demo point, not a problem.
+Өрөө чимээтэй бол микрофоноо ойр байлга; `is_command` gate нь хажуугийн яриаг ямар ч байсан
+алгасдаг — энэ бол демо-гийн давуу тал, асуудал биш.
 
 ---
 
-## 0:00 — Hook (15 s)
+## 0:00 — Эхлэл (15 сек)
 
-Camera on both windows. Say:
+Камер хоёр цонхыг зэрэг харуулна. Хэл:
 
-> **"Go to wikipedia."**
+> **"Википедиа руу яв."**
 
-Point at the controlled window: it navigates as the word "wikipedia" lands. Point at the header
-pills on the control page: **last ~300 ms**, **cost $0.000xxx**.
+Удирдагдах цонхыг заа: "википедиа" гэдэг үг ирэнгүүт шилждэг. Удирдлагын хуудсын толгойн
+шошгуудыг заа: **сүүлийн ~300 мс**, **зардал $0.000xxx**.
 
-Line: *"That wasn't an LLM writing a plan. A model answered eleven yes/no and multiple-choice
-questions in three hundred milliseconds, and code did the rest."*
+Хэлэх мөр: *"Энэ төлөвлөгөө бичиж байгаа LLM биш. Модель гурван зуу миллисекунд дотор арван нэг
+тийм/үгүй ба олон сонголттой асуултад хариулж, үлдсэнийг код хийсэн."*
 
-## 0:20 — What Jev is (30 s)
+## 0:20 — Jev гэж юу вэ (30 сек)
 
-Point at the **JEV DECISION** panel and the intent bars.
+**JEV DECISION** самбар болон санаархлын баруудыг заа.
 
-- Jev is TypeSafe's *System One* model: it does not generate text. You send a state and a set of
-  typed questions, you get one typed answer per question — probabilities, not prose.
-- All questions are answered **in parallel**, so we ask everything speculatively in one request:
-  intent, which element, which site, "is the sentence finished?", "is this even for me?", "is it
-  destructive?", scroll amount, and which verbatim span is the search text.
-- Pricing: $0.042 per million input tokens, output free. Point at the cost pill: a whole demo is
-  about a cent.
+- Jev бол TypeSafe-ийн *System One* модель: текст үүсгэдэггүй. Төлөв ба төрөлжсөн асуултуудын
+  багцыг илгээнэ, асуулт бүрт нэг төрөлжсөн хариулт авна — магадлал, зохиол биш.
+- Бүх асуулт **зэрэгцээ** хариулагддаг тул бид бүгдийг нэг хүсэлтээр урьдчилан асуудаг:
+  санаархал, аль элемент, аль сайт, "өгүүлбэр дууссан уу?", "энэ ер нь надад хэлэгдэж байна
+  уу?", "эвдэх үйлдэл үү?", гүйлгэх хэмжээ, аль нэрэмжит хэсэг нь хайлтын текст вэ.
+- Үнэ: сая оролтын токенд $0.042, гаралт үнэгүй. Зардлын шошгыг заа: бүтэн демо нэг
+  цент орчим.
 
-## 0:50 — Acting on partial speech (45 s)
+## 0:50 — Хэсэгчилсэн ярианаас ажиллах (45 сек)
 
-Say slowly, with a small pause after "for":
+"хай" гэдгийн дараа бага зэрэг завсарлаад удаан хэл:
 
-> **"Search for … Alan Turing."**
+> **"Алан … Туринг … хай."**
 
-Point at the gate table while you pause: `complete 0.03 ✗` — it *waits*. Then it types into
-Wikipedia's own search box and hits Enter (highlight + toast in the controlled window).
+Завсарлах зуур gate хүснэгтийг заа: `complete 0.0x ✗` — тэгэхэд *хүлээж байна*. Дараа нь
+Wikipedia-гийн өөрийн хайлтын талбарт бичээд Enter дарна (удирдагдах цонхонд highlight + toast).
 
-Line: *"The `complete` question is why it can act early without acting wrong: 'search for' alone
-scores 0.03, 'search for Alan Turing' scores 0.97. And the text it typed was never generated — my
-code cut candidate spans out of the transcript, Jev only picked one. Look at the text_span bars."*
+Хэлэх мөр: *"`complete` асуулт нь яагаад эрт ажиллаж чаддаг ч буруу ажилладаггүйг тайлбарлана:
+"Алан" ганцаараа бага оноо авдаг, "Алан Туринг хай" өндөр оноо авдаг. Бичсэн текст нь хэзээ ч
+үүсгэгдээгүй — миний код транскриптаас нэрэмжит хэсгүүдийг хайчилж авсан, Jev зөвхөн нэгийг
+сонгосон. `text_span` баруудыг хар."*
 
-> **"Scroll down a bit."**
+> **"Доош гүйлгэ."**
 
-> **"Scroll to the bottom."**
+> **"Төгсгөл хүртэл гүйлгэ."**
 
-Point at **SCROLL AMOUNT**: a 3-level Score — a little / one page / to the end.
+**SCROLL AMOUNT**-ыг заа: 3 түвшний Score — жаахан / нэг хуудас / төгсгөл хүртэл.
 
-> **"Go back."**
+> **"Буцах."**
 
-## 1:35 — Clicking things: the element snapshot (45 s)
+## 1:35 — Юм дээр дарах: элементийн скан (45 сек)
 
-> **"Go to hacker news."**
+> **"Hacker news руу яв."**
 
-Point at the **ELEMENTS SENT TO JEV** list: ~100 interactive elements with short ids, viewport
-first, 60 chars each. That is the whole state — a few thousand tokens.
+**ELEMENTS SENT TO JEV** жагсаалтыг заа: ~100 харилцах элемент, богино id-тай, эхлээд дэлгэцэн
+дээрх, тус бүр 60 тэмдэгт. Энэ бол бүх төлөв — хэдэн мянган токен.
 
-> **"Click the new link."**
+> **"Шинэ холбоос дээр дар."**
 
-The target bar shows `e03 new 0.97`. The element flashes orange before the click.
+Зорилтын бар `e03 new 0.97` гэж харуулна. Дарахаас өмнө элемент улбар шараар анивчина.
 
-Now the ambiguous one:
+Одоо хоёрдмол тохиолдол:
 
-> **"Click on a link."**
+> **"Нэг холбоос дээр дар."**
 
-Target confidence drops below 0.45 → numbered blue badges appear on the top candidates in the page
-and the toast says *"Which one? Say the number."* Say:
+Зорилтын итгэл 0.45-аас доош унана → хуудсан дээрх шилдэг сонголтууд дээр дугаартай цэнхэр
+тэмдэг гарч, toast нь *"Аль нь вэ? Дугаарыг хэл."* гэж хэлнэ. Хэл:
 
-> **"Two."**
+> **"Хоёр."**
 
-Line: *"No model call for the number — that's a regex. Jev answers judgment, code answers
-arithmetic."*
+Хэлэх мөр: *"Дугаарт модель дуудагдахгүй — энэ бол regex. Jev нь шүүлт хариулдаг, код нь
+арифметик хариулдаг."*
 
-## 2:20 — Safety gates (40 s)
+## 2:20 — Аюулгүй байдлын gate-үүд (40 сек)
 
-> **"Go to example dot com."**
+> **"example dot com руу яв."**
 
-Point at **url_span**: the domain was regex-extracted from "example dot com" and Jev picked it.
+**url_span**-ыг заа: домэйн нь "example dot com"-оос regex-ээр гаргаж авагдаж, Jev түүнийг
+сонгосон.
 
-> **"Click the more information link."**
+> **"More information холбоос дээр дар."**
 
-Then side-talk to someone off camera in a normal voice:
+Дараа нь камерт ороогүй хүнтэй энгийн дуугаар хажуугийн яриа өрнүүл:
 
-> **"…so anyway I think we should get lunch after this."**
+> **"…за тэгээд дараа нь хоол идье гэж бодож байна."**
 
-Point at the verdict: `IGNORE — not a browser command`, `is_command 0.02`. Nothing moved.
+Дүгнэлтийг заа: `IGNORE — not a browser command`, `is_command` босго 0.5-аас доогуур. Юу ч
+хөдлөөгүй.
 
-Destructive gate (optional, needs a page with a buy/submit/delete button — GitHub's "delete
-repository", any checkout page, or the `FORM_PAGE` fixture in the integration test): say
-"click place order" → verdict `CONFIRM`, toast *Say "confirm"…* → say "cancel".
+Эвдэх үйлдлийн gate (сонголтоор; худалдах/илгээх/устгах товчтой хуудас хэрэгтэй — GitHub-ийн
+"delete repository", аль ч төлбөрийн хуудас, эсвэл integration тестийн `FORM_PAGE` fixture):
+"захиалга хий дээр дар" гэж хэл → дүгнэлт `CONFIRM`, toast *"confirm" гэж хэл…* → "cancel" гэж
+хэл.
 
-## 3:00 — Two commands in one breath (20 s)
+## 3:00 — Нэг амьсгалаар хоёр команд (20 сек)
 
-> **"Open a new tab and go to wikipedia."**
+> **"Шинэ таб нээгээд википедиа руу яв."**
 
-The tab opens as soon as "open a new tab" is complete; the remaining words become a second command.
+"шинэ таб нээ" дуусахтай зэрэг таб нээгдэнэ; үлдсэн үгс нь хоёр дахь команд болно.
 
-> **"Close this tab."**
+> **"Энэ табыг хаа."**
 
-## 3:20 — Show the code (40 s)
+## 3:20 — Кодоо үзүүл (40 сек)
 
-Open `src/constants.js` on screen.
+`src/constants.js`-ыг дэлгэц дээр нээ.
 
-- `MODEL = "jev-1.13.0"` — pinned, because aliases move and thresholds are tuned per version.
-- Scroll through `INTENT_CRITERIA`: every option is `{what, not_for, examples}` — contrastive
-  descriptions are what make a Choice sharp.
-- `T` — the thresholds you just saw in the gate table. *"This is the entire policy. Change a
-  number, not a prompt."*
-- `PAYLOAD_INTENTS` / `PAYLOAD_SILENCE_MS` — why searches wait for the end of the phrase but
-  "go back" doesn't.
+- `MODEL = "jev-1.13.0"` — pin хийсэн, учир нь alias хөдөлдөг ба босгууд хувилбар тус бүрээр
+  тохируулагддаг.
+- `INTENT_CRITERIA`-г гүйлгэн үзүүл: сонголт бүр `{what, not_for, examples}` — ялгаатай
+  тодорхойлолт нь Choice-ыг хурц болгодог.
+- `T` — сая gate хүснэгтэд харсан босгууд. *"Энэ бол бүхэл бодлого. Prompt биш, тоо соль."*
+- `PAYLOAD_INTENTS` / `PAYLOAD_SILENCE_MS` — яагаад хайлт нь хэллэгийн төгсгөлийг хүлээдэг ч
+  "буцах" хүлээдэггүй.
 
-Open `src/policy.js` briefly: it's `if` statements over probabilities.
+`src/policy.js`-ыг товч нээ: энэ бол магадлал дээрх `if` мөрүүд.
 
-## 4:00 — Numbers and close (20 s)
+## 4:00 — Тоонууд ба төгсгөл (20 сек)
 
-Run in a terminal (or show a pre-recorded run):
+Терминалд ажиллуул (эсвэл урьд нь бичсэн бичлэгээ үзүүл):
 
 ```bash
-npm run test:integration    # 27/27 real-API cases, latency avg ≈ 330 ms
-npm run demo:ci             # 16 spoken commands, headless, asserts URLs
+npm run test:integration    # 27/27 жинхэнэ API кейс, хоцролт дундаж ≈ 330 мс
+npm run demo:ci             # 16 хэлсэн команд, headless, URL шалгана
 ```
 
-Read the summary line: *acted@word < total* means the browser acted before the sentence ended.
+Хураангуй мөрийг унш: *acted@word < total* гэдэг нь өгүүлбэр дуусахаас өмнө хөтөч ажилласан
+гэсэн үг.
 
-Close: *"Fast because it's not thinking out loud. Reliable because code owns the control flow and
-the model only answers the questions a person could answer in a second."*
+Төгсгөл: *"Хурдан, учир нь энэ чанга бодож байгаа юм биш. Найдвартай, учир нь удирдлагын урсгалыг
+код эзэмшдэг ба модель зөвхөн хүн нэг секундэд хариулж чадах асуултуудад л хариулдаг."*
 
 ---
 
-## Phrases that work well (backup list)
+## Сайн ажилладаг хэллэгүүд (нөөц жагсаалт)
 
-- "go to youtube" · "open github" · "go to news dot ycombinator dot com"
-- "search wikipedia for alan turing" · "search youtube for lofi beats" · "look up the weather in berlin"
-- "click the first result" · "click sign in" · "open the comments tab"
-- "type hello world into the search box" · "press enter"
-- "scroll down a page" · "scroll up" · "back to the top" (may map to scroll_up or go_back — watch the bars)
-- "reload" · "go forward" · "next tab"
+- "youtube руу яв" · "github нээ" · "news dot ycombinator dot com руу яв"
+- "википедиагаас алан туринг хай" · "youtube-оос lofi beats хай" · "берлиний цаг агаарыг хай"
+- "эхний үр дүн дээр дар" · "нэвтрэх дээр дар" · "comments табыг нээ"
+- "хайлтын талбарт hello world гэж бич" · "enter дар"
+- "нэг хуудас доош гүйлгэ" · "дээш гүйлгэ" · "дээшээ" (scroll_up эсвэл go_back болж магадгүй —
+  баруудыг хар)
+- "reload" · "урагшаа" · "дараагийн таб"
+- "буцах" · "шинэ таб нээ" · "энэ табыг хаа"
 
-## If something goes wrong on camera
+## Камер дээр ямар нэгэн зүйл буруу болвол
 
-- Mic stops after silence: Chrome ends continuous sessions after ~60 s of silence; the page
-  restarts it automatically (the dot keeps pulsing). If it says *error: not-allowed*, allow the mic
-  in the site settings.
-- Nothing happens: read the gate table — it tells you which threshold failed. Say the command again
-  a bit more explicitly ("click the link that says new").
-- Wrong element: say "go back" (or click **Undo / back**).
-- Page has no snapshot yet after a navigation: click **Re-scan page**.
+- Чимээгүй байдлын дараа микрофон зогсох: Chrome нь ~60 секунд чимээгүй байдлын дараа тасралтгүй
+  сессээ дуусгадаг; хуудас түүнийг автоматаар дахин эхлүүлдэг (цэг лугшиж л байна). Хэрэв
+  *error: not-allowed* гэвэл сайтын тохиргооноос микрофоныг зөвшөөр.
+- Юу ч болохгүй: gate хүснэгтийг унш — аль босго унасныг хэлж өгнө. Командаа бага зэрэг
+  тодорхой хэлж дахин хэл ("new гэж бичсэн холбоос дээр дар").
+- Буруу элемент: "буцах" гэж хэл (эсвэл **Undo / back** дар).
+- Шилжилтийн дараа хуудсанд скан байхгүй: **Re-scan page** дар.

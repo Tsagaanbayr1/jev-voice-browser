@@ -1,9 +1,19 @@
 {
-  "name": "voice-browser",
+  "name": "jev-voice-browser",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Control a real browser by voice. Jev (TypeSafe System One) decides intent/target in ~100-300 ms; Playwright executes.",
+  "description": "Жинхэнэ хөтчийг дуу хоолойгоор удирдана. Jev (TypeSafe System One) санаархал/зорилтыг ~100-300 мс дотор шийдэж, Playwright гүйцэтгэнэ. Монгол хэлний бүрэн дэмжлэгтэй fork.",
+  "keywords": [
+    "voice",
+    "browser",
+    "mongolian",
+    "jev",
+    "typesafe",
+    "playwright",
+    "speech",
+    "accessibility"
+  ],
   "engines": {
     "node": ">=20"
   },
@@ -22,8 +32,17 @@
     "ws": "^8.18.0"
   },
   "license": "MIT",
+  "author": "Tsagaanbayr1 (fork); Moritz Kremb (original work)",
   "repository": {
     "type": "git",
+    "url": "https://github.com/Tsagaanbayr1/jev-voice-browser.git"
+  },
+  "homepage": "https://github.com/Tsagaanbayr1/jev-voice-browser#readme",
+  "upstream": {
+    "type": "git",
     "url": "https://github.com/moritzkremb/jev-voice-browser.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Tsagaanbayr1/jev-voice-browser/issues"
   }
 }

@@ -1,84 +1,135 @@
-# voice-browser — talk to a real browser, it acts before you finish the sentence
+# voice-browser — жинхэнэ хөтөч рүү ярь; өгүүлбэрээ дуусахад нь хийчихнэ
 
-A Node app that controls a **headed Chromium window** (Playwright) by voice. Speech is streamed
-word by word from the browser's Web Speech API to a small Node server; on every partial transcript
-the server asks **Jev** (TypeSafe's System One model, `jev-1.13.0`) one request with a dozen typed
-questions — intent, target element, site, "is the command complete?", "is this even addressed to
-me?", "is it destructive?" — gets typed probabilities back in ~250–350 ms, and code decides whether
-to act, wait, ask, or ignore.
+**Харагдах Chromium цонхыг** (Playwright) дуу хоолойгоор удирддаг Node апп. Яриа хөтчийн
+Web Speech API-аас үг үгээр урсаж Node сервер рүү ирнэ; хэсэгчилсэн транскрипт бүр дээр сервер
+**Jev** (TypeSafe-ийн System One модель, `jev-1.13.0`) рүү нэг хүсэлт явуулж арваад төрөлжсөн
+асуулт тавина — санаархал, зорилтот элемент, сайт, "команд дууссан уу?", "энэ намайг
+дуудаж байна уу?", "эвдэх үйлдэл үү?" — хариултыг ~250–350 мс дотор магадлал хэлбэрээр буцааж
+авна. Дараа нь **код** шийднэ: хийх, хүлээх, асуух, эсвэл алгасах.
 
-Jev never generates text. Search queries, typed text and URLs are extracted as candidate spans by
-code and Jev only *picks* one, which is copied verbatim.
+Jev хэзээ ч текст үүсгэдэггүй. Хайлтын үг, бичих текст, URL-ыг код нэрэмжит хэсгүүд
+(candidate spans) болгон гаргаж авдаг ба Jev зөвхөн *сонгоно* — сонгосон нь шууд хуулагдана.
 
 ```
- mic (Chrome, Web Speech API)          Node server (owns the API key)             controlled window
- ───────────────────────────    ws     ───────────────────────────────────         ──────────────────
- partial transcripts  ───────────────▶ debounce 200 ms                            headed Chromium via
- "go to"  "go to wiki"                 snapshot page (≤100 elements, e01..eNN) ◀── Playwright, persistent
- "go to wikipedia" (final)             ONE Jev request: 9–11 questions             profile, overlay
-                                       policy (thresholds in constants.js)  ───▶  highlight / toast /
- control page ◀─────────────────────── decision + bars + latency + cost            numbered candidates
+ микрофон (Chrome, Web Speech API)     Node сервер (API түлхүүр энд байна)        удирдагдах цонх
+ ───────────────────────────────  ws   ────────────────────────────────────       ────────────────
+ хэсэгчилсэн транскрипт  ────────────▶ 200 мс debounce                          харагдах Chromium,
+ "википедиа руу"                        хуудсыг скан (≤100 элемент, e01..eNN) ◀── Playwright, байнгын
+ "википедиа руу яв" (эцсийн)           НЭГ Jev хүсэлт: 9–11 асуулт              профайл, overlay
+                                       бодлого (босго нь constants.js)  ───▶   highlight / toast /
+ удирдлагын хуудас ◀─────────────────── шийдвэр + бар + хоцролт + зардал          дугаартай сонголтууд
 ```
 
-## Run it
+## Ажиллуулах
 
-Requirements: Node ≥ 20 (tested on 22), npm, Chrome or Edge for the microphone (the Web Speech API
-is not available in Firefox/Safari). Real API calls cost ~$0.0002 each.
+Шаардлага: Node ≥ 20 (22 дээр туршсан), npm, микрофон ашиглахын тулд Chrome эсвэл Edge
+(Web Speech API нь Firefox/Safari-д байхгүй). Жинхэнэ API дуудлага бүр ~$0.0002.
 
 ```bash
-git clone https://github.com/moritzkremb/jev-voice-browser.git
+git clone https://github.com/Tsagaanbayr1/jev-voice-browser.git
 cd jev-voice-browser
 npm install
 npx playwright install chromium
-cp .env.example .env          # paste your TypeSafe API key (https://console.typesafe.ai/keys)
-./run.sh                      # starts the server on http://localhost:8787
+cp .env.example .env          # TypeSafe API түлхүүрээ буулгана (https://console.typesafe.ai/keys)
+./run.sh                      # серверийг http://localhost:8787 дээр асаана
 ```
 
-Then open **http://localhost:8787 in your normal Chrome**, click **Start mic**, allow the
-microphone, and speak. A separate Chromium window (the *controlled* browser) is opened by the server;
-that is the one that acts. Keep the control page visible on a second screen / half the screen for
-the live probability bars.
+Дараа нь **http://localhost:8787-г өөрийн энгийн Chrome-оор нээж**, **Start mic** дарж,
+микрофоны зөвшөөрөл өгөөд ярина. Сервер нь тусдаа Chromium цонх (*удирдагдах* хөтөч) нээнэ —
+үйлдлийг тэр нь хийнэ. Магадлалын барыг шууд харахын тулд удирдлагын хуудсыг хоёр дахь дэлгэц
+эсвэл дэлгэцийн хагаст байнга нээлттэй байлгаарай.
 
-Options: `./run.sh --port 9000`, `--host 0.0.0.0` (LAN, see Security), `--start-url https://…`, `--headless` (CI), or attach to a Chrome
-you already have running instead of launching one:
+Нэмэлт тохиргоо: `./run.sh --port 9000`, `--host 0.0.0.0` (локал сүлжээ — Аюулгүй байдлыг үзнэ
+үү), `--start-url https://…`, `--lang mn` (ярих хэл), `--ui-lang mn` (дэлгэцийн хэл),
+`--headless` (CI). Эсвэл шинээр нээхийн оронд өөрт байгаа Chrome-д холбогдоно:
 
 ```bash
-# start your Chrome with a debugging port, then:
+# Chrome-оо debugging порттой асаагаад:
 ./run.sh --cdp http://127.0.0.1:9222
 ```
 
-Set the key yourself instead of `.env`: `export TYPESAFE_API_KEY=…` (legacy `JEV_API_KEY` is
-also accepted) and `npm start`. The key is only ever read by the Node process; the control page
-never sees it.
+`.env`-ийн оронд түлхүүрээ өөрөө өгч болно: `export TYPESAFE_API_KEY=…` (хуучин `JEV_API_KEY`
+нэрийг ч хүлээнэ) дараа нь `npm start`. Түлхүүрийг зөвхөн Node процесс уншина; удирдлагын
+хуудас түүнийг хэзээ ч хардаггүй.
 
-**Security:** the server listens on `127.0.0.1` only. Anyone who can reach the control port can
-drive the browser and spend your API credits, so only use `--host 0.0.0.0` on a network you trust.
-The controlled Chromium uses a persistent profile in `.browser-profile/` (gitignored) — don't log
-into accounts there that you wouldn't want a mis-heard "click place order" to touch; destructive
-clicks require a spoken "confirm", but treat that as a convenience, not a guarantee.
+**Аюулгүй байдал:** сервер зөвхөн `127.0.0.1` дээр сонсдог. Удирдлагын порт руу хүрч чадах
+хүн бүр хөтчийг удирдаж, таны API-ийн үлдэгдлийг зарцуулж чадна — тиймээс `--host 0.0.0.0`-г
+зөвхөн итгэдэг сүлжээндээ ашиглаарай. Удирдагдах Chromium нь `.browser-profile/` дотор
+байнгын профайл хэрэглэдэг (git-д ороогүй) — санамсаргүй сонсогдсон "click place order"-т
+хүрэхийг хүсэхгүй байгаа бүртгэлд тэнд нэвтэрч болохгүй. Эвдэх үйлдэл нь дуугаар
+"confirm" хэлэхийг шаарддаг ч үүнийг баталгаа биш, тав тух гэж ойлгоорой.
 
-No microphone? Type a command into the text box on the control page and press Enter.
+Микрофонгүй юу? Удирдлагын хуудсан дээрх текст хайрцагт командаа бичээд Enter дар.
 
-## What you can say
+## Хэлнүүд (English · Монгол)
 
-| Say | What happens |
+**Хоёр хэл бие даасан** — энэ нь чухал:
+
+| Тэнхлэг | Юуг удирдах | Хаана солих |
+| --- | --- | --- |
+| **Ярих хэл** (`lang`) | таних хөдөлгүүр болон Jev-д өгөх жишээнүүд | **Start mic**-ийн хажуудах сонгогч, `./run.sh --lang mn`, `VOICE_LANG=mn` |
+| **Дэлгэцийн хэл** (`uiLang`) | зөвхөн харагдах бичвэр — модельд хэзээ ч хүрэхгүй | толгой хэсгийн сонгогч, `./run.sh --ui-lang mn`, `VOICE_UI_LANG=mn` |
+
+Монголоор ярьж байхдаа англи debug шошго унших нь бүрэн боломжтой — тиймээс хоёр нь тусдаа
+талбар, тусдаа сонгогч. Дэлгэцийн хэлний сонгогч нь бүх хилийн бичвэрийг, шийдвэрийн хүснэгтийг
+болон **аль хэдийн болсон үйлдлүүдийн логыг** ч дахин зурна: лог нь текст биш, түлхүүр
+хэлбэрээр хадгалагддаг тул хэл солиход түүх ч гэсэн шинэ хэлээр гарна.
+
+Монгол хэл эхнээсээ дуустал ажилладаг:
+
+| Хэлэх | Юу болох |
 | --- | --- |
-| "go to wikipedia" / "open youtube" / "go to example dot com" | navigates (site list or spoken domain, code owns the URLs) |
-| "search for alan turing" | uses the page's own search box if it has one (Wikipedia, YouTube…), else DuckDuckGo |
-| "search youtube for lofi beats" | site-specific search URL template |
-| "click the first result" / "click the new link" / "open the comments tab" | clicks the element Jev picked from the snapshot; ambiguous → numbered overlays, say "two" |
-| "type hello world into the search box" | types verbatim (Jev picked the span, code copies it) |
-| "scroll down a bit" / "scroll to the bottom" / "scroll up a page" | scroll with amount from a 3-level Score |
-| "go back" / "go forward" / "reload" | history |
-| "open a new tab" / "close this tab" / "next tab" | tabs |
-| "click place order" | destructive → toast asks you to say **"confirm"** (or "cancel") |
-| "so anyway I think we should get lunch" | ignored (`is_command` ≈ 0.02) |
+| "википедиа руу яв" | **mn**.wikipedia.org нээнэ (хэл тус бүрийн хаяг) |
+| "Алан Туринг хай" | хайна — анхаар: хайлтын үг *үйл үгийн өмнө* ирнэ |
+| "эхний холбоос дээр дар" / "хоёр" | дарна, эсвэл дуугаар хэлсэн дугаараар overlay-аас сонгоно |
+| "хайлтын талбарт сайн байна уу гэж бич" | "сайн байна уу" гэж бичнэ (очих газар эхэндээ хэлэгдэнэ) |
+| "доош гүйлгэ" · "буцах" · "шинэ таб нээ" | гүйлгэх · буцах · шинэ таб |
+| "өнөөдөр цаг агаар сайхан байна" | алгасна — энэ бол команд биш, энгийн яриа |
 
-Two commands in one breath work too: "go to example dot com and click the more information link".
+Энэ нь зүгээр орчуулсан тэмдэгт мөр биш (`src/lang.js`):
 
-## How a decision is made
+- **Үгийн дараалал.** Англи хэл үйл үгийнхээ дараа хайлтын үгийг тавьдаг ("search for cats"),
+  монгол хэл өмнө нь тавьдаг ("муур хай"), очих газрыг бүр түрүүнд ("хайлтын талбарт … гэж
+  бич"). Нэрэмжит хэсгүүдийг код гаргаж авдаг тул хоёр дарааллыг хоёуланг нь зөв барьдаг.
+- **Жишээ нь чухал, асуултын үг биш.** Асуултууд англи хэвээр үлддэг — Jev монгол
+  `transcript`-ыг зөв шүүдэг — харин санаархал бүр ярих хэл дээрх жишээнүүдтэй. `jev-1.13.0`
+  дээр зөвхөн англи жишээтэй хэмжихэд: "буцах" нь `intent=none` авч, "Алан Туринг хай" нь
+  `is_command` 0.22 (0.5 босгоос доогуур) авч, хоёулаа чимээгүй алгасагдаж байсан. Монгол
+  жишээтэй бол мөнөөх арван команд 6/10-аас 9/10 болж зөв ажилладаг
+  (`test/integration/jev-mn.test.js`).
 
-Every transcript update produces exactly one Jev request (`src/jev.js`). State:
+Кирилл транскриптыг сонгогч англи гэж зааж байсан ч үргэлж монгол гэж үзнэ — ингэснээр буруу
+тавьсан сонгогч хэсэг задлан авахыг чимээгүй эвдэхгүй.
+
+**Диктовкын дэмжлэг нь хөтчийнх, биднийх биш.** Chrome-ийн Web Speech API нь аудиог Google-ийн
+ярианы үйлчилгээ рүү илгээдэг бөгөөд `mn-MN` санал болгогдох нь баталгаагүй. Хэрэв болохгүй бол
+таних хөдөлгүүр `language-not-supported` алдаа өгнө; удирдлагын хуудас үүнийг тодорхой хэлж,
+текст хайрцаг руу чиглүүлнэ. Тэнд бичсэн монгол хэл яг адилхан ажиллана — зөвхөн диктовка
+дутагдаж байгаа юм.
+
+Шинэ хэл нэмэх нь `src/lang.js` дотор нэг объект (үйл үг, бөглөх үгс, тооны үгс, ярианы
+хүрээний үгс, сайтын өөр нэрс, санаархал бүрийн жишээ) бас удирдлагын хуудсанд нэг `<option>`.
+
+## Юу гэж хэлж болох
+
+| Хэлэх | Юу болох |
+| --- | --- |
+| "go to wikipedia" / "open youtube" / "go to example dot com" | шилжинэ (сайтын жагсаалт эсвэл хэлсэн домэйн; URL-ыг код эзэмшинэ) |
+| "search for alan turing" | хуудсанд өөрийн хайлтын талбар байвал түүнийг ашиглана (Wikipedia, YouTube…), эс бөгөөс DuckDuckGo |
+| "search youtube for lofi beats" | сайт тус бүрийн хайлтын URL загвар |
+| "click the first result" / "click the new link" / "open the comments tab" | Jev скангаас сонгосон элемент дээр дарна; хоёрдмол бол дугаартай overlay гарч, "two" гэж хэлнэ |
+| "type hello world into the search box" | шууд бичнэ (Jev хэсгийг сонгосон, код хуулсан) |
+| "scroll down a bit" / "scroll to the bottom" / "scroll up a page" | 3 түвшний Score-оос авсан хэмжээгээр гүйлгэнэ |
+| "go back" / "go forward" / "reload" | түүх |
+| "open a new tab" / "close this tab" / "next tab" | табууд |
+| "click place order" | эвдэх үйлдэл → toast **"confirm"** (эсвэл "cancel") гэж хэлэхийг асууна |
+| "so anyway I think we should get lunch" | алгасна (`is_command` ≈ 0.02) |
+
+Нэг амьсгалаар хоёр команд ч болно: "go to example dot com and click the more information link".
+
+## Шийдвэр хэрхэн гардаг
+
+Транскриптын шинэчлэл бүр яг нэг Jev хүсэлт үүсгэнэ (`src/jev.js`). Төлөв:
 
 ```json
 { "transcript": "click the first result",
@@ -86,78 +137,95 @@ Every transcript update produces exactly one Jev request (`src/jev.js`). State:
   "elements": ["e02 combobox \"jev typesafe\" (placeholder: Search privately)", "e20 link \"TypeSafe — Jev\" → typesafe.ai", "..."] }
 ```
 
-Questions (all in `src/constants.js`, asked together, answered in parallel):
+Асуултууд (бүгд `src/constants.js` дотор; хамт тавигдаж, зэрэгцээ хариулагдана):
 
-| id | type | answers |
+| id | төрөл | хариултууд |
 | --- | --- | --- |
-| `intent` | Choice | navigate_url · search_web · click_element · type_into_field · select_option · press_enter · scroll_down/up · go_back/forward · reload · open/close/switch tab · confirm · cancel · none — each option has `{what, not_for, examples}` |
-| `target` | Choice | the element ids on the page + `none` |
+| `intent` | Choice | navigate_url · search_web · click_element · type_into_field · select_option · press_enter · scroll_down/up · go_back/forward · reload · open/close/switch tab · confirm · cancel · none — сонголт бүр `{what, not_for, examples}`-тай |
+| `target` | Choice | хуудсан дээрх элементүүдийн id + `none` |
 | `site` | Choice | google · duckduckgo · the_web · youtube · wikipedia · github · amazon · reddit · twitter_x · hacker_news · example_com · other_named_site · none |
-| `complete` | Noul | has the user finished the command? (lets us act on partial speech) |
-| `is_command` | Noul | is the user addressing the browser at all? |
-| `destructive` | Noul | would it submit / buy / delete / send? |
-| `scroll_amount` | Score | a little · one page · to the end |
-| `text_span` | Choice | verbatim candidate spans extracted by regex (+ `none`) — only when the transcript has any |
-| `url_span` | Choice | domain-looking spans (+ `none`) — only when present |
+| `complete` | Noul | хэрэглэгч командаа дуусгасан уу? (хэсэгчилсэн ярианаас эрт ажиллах боломж олгоно) |
+| `is_command` | Noul | хэрэглэгч ер нь хөтөч рүү хандаж байна уу? |
+| `destructive` | Noul | илгээх / худалдах / устгах / явуулах үү? |
+| `scroll_amount` | Score | жаахан · нэг хуудас · төгсгөл хүртэл |
+| `text_span` | Choice | regex-ээр гаргаж авсан шууд нэрэмжит хэсгүүд (+ `none`) — зөвхөн транскриптэд байвал |
+| `url_span` | Choice | домэйн мэт хэсгүүд (+ `none`) — зөвхөн байвал |
 | `tab_direction` | Choice | next · previous · first · none |
 
-Policy (`src/policy.js`, thresholds `T` in `constants.js`), shown live in the UI as a gate table:
+Бодлого (`src/policy.js`, босго нь `constants.js` доторх `T`), UI дээр gate хүснэгт болж шууд
+харагдана:
 
-1. `is_command ≥ 0.5` else **ignore**
-2. `intent.confidence ≥ 0.55` and not `none` else **wait**
-3. `complete ≥ 0.6`, or 900 ms of silence, or the recognizer's final result — else **wait**
-4. free-text intents (search / type) additionally wait for the final result or 600 ms silence, so a
-   query is never truncated ("search for alan" vs "search for alan turing")
-5. build the action in code: URL templates, search-box fallback, verbatim span copy
-6. click/type targets need `target.confidence ≥ 0.45` and top probability ≥ 0.35, else the top 2–3
-   candidates get numbered overlays in the page and a spoken number picks one (no model call)
-7. `destructive ≥ 0.5` on a click → **confirm** (say "confirm" / "cancel")
+1. `is_command ≥ 0.5` — үгүй бол **ignore**
+2. `intent.confidence ≥ 0.55` бөгөөд `none` биш — үгүй бол **wait**
+3. `complete ≥ 0.6`, эсвэл 900 мс чимээгүй байдал, эсвэл таних хөдөлгүүрийн эцсийн үр дүн —
+   үгүй бол **wait**
+4. чөлөөт текстийн санаархлууд (search / type) нэмж эцсийн үр дүн эсвэл 600 мс чимээгүй
+   байдлыг хүлээнэ — ингэснээр хайлтын үг хэзээ ч таслагдахгүй ("search for alan" ба
+   "search for alan turing")
+5. үйлдлийг код дотор бүтээнэ: URL загварууд, хайлтын талбарын нөөц хувилбар, хэсгийг шууд
+   хуулах
+6. дарах/бичих зорилтод `target.confidence ≥ 0.45` ба хамгийн өндөр магадлал ≥ 0.35 шаардана;
+   үгүй бол шилдэг 2–3 сонголт хуудсан дээр дугаартай overlay авч, хэлсэн дугаар нэгийг
+   сонгоно (модель дуудагдахгүй)
+7. дарах үед `destructive ≥ 0.5` → **confirm** ("confirm" / "cancel" гэж хэлнэ)
 
-Requests overlap: up to 2 in flight; older ones are cancelled with `AbortSignal`. A response for a
-partial transcript may still act if the words already commit to a closed-set action ("go back"),
-but is never treated as final for free text.
+Хүсэлтүүд давхцана: нэгэн зэрэг 2 хүртэл; хуучин нь `AbortSignal`-аар цуцлагдана. Хэсэгчилсэн
+транскриптын хариулт нь үгс нь аль хэдийн хаалттай үйлдлийг илэрхийлж байвал ("go back") ажиллаж
+болно, харин чөлөөт текстийн хувьд хэзээ ч эцсийн гэж үзэгдэхгүй.
 
-## Project layout
+## Төслийн бүтэц
 
 ```
-src/constants.js   MODEL pin, thresholds, every question text — the one file to review on camera
-src/jev.js         builds state + questions, calls @typesafe-ai/sdk, returns answers/latency/usage/cost
-src/spans.js       candidate extraction (text payloads, spoken URLs, number words) — code, not Jev
-src/snapshot.js    in-page element collector (tags data-vb-id), compaction + size guard, site detection
-src/policy.js      answers → act / wait / ignore / confirm / disambiguate, with reasons
-src/executor.js    Playwright actions + overlay feedback
-src/browser.js     launch headed Chromium (persistent profile) or attach via CDP; tabs
-src/overlay.js     injected highlight / toast / numbered badges
-src/controller.js  debounce, in-flight management, one action per utterance, chaining, stats
-src/server.js      Express + ws, serves src/public/index.html (control page)
-scripts/demo.js    word-by-word replay against real sites = end-to-end test
-test/unit/         spans, snapshot compaction, policy (mocked Jev), controller (mocked Jev + browser)
-test/integration/  27 real-API cases on captured page fixtures, prints pass rate + latency
+src/constants.js   MODEL pin, босгууд, асуулт бүрийн текст — камер дээр үзүүлэх ганц файл
+src/jev.js         төлөв + асуултуудыг бүтээж, @typesafe-ai/sdk-г дуудаж, хариулт/хоцролт/хэрэглээ/зардал буцаана
+src/spans.js       нэрэмжит хэсэг гаргаж авах (текстийн агуулга, хэлсэн URL, тооны үгс) — код, Jev биш
+src/snapshot.js    хуудас доторх элемент цуглуулагч (data-vb-id тавьдаг), шахах + хэмжээний хамгаалалт, сайт таних
+src/policy.js      хариултууд → act / wait / ignore / confirm / disambiguate, шалтгаантайгаа
+src/executor.js    Playwright үйлдлүүд + overlay-ийн хариу мэдэгдэл
+src/browser.js     харагдах Chromium нээх (байнгын профайл) эсвэл CDP-ээр холбогдох; табууд
+src/overlay.js     хуудсанд суулгах highlight / toast / дугаартай тэмдэг
+src/controller.js  debounce, хүсэлтийн удирдлага, нэг амьсгалд нэг үйлдэл, хэлхээ, статистик
+src/server.js      Express + ws, src/public/index.html (удирдлагын хуудас)-ыг үйлчилнэ
+src/public/        удирдлагын хуудас, микрофоны recorder, i18n хүснэгт
+src/lang.js        хэл тус бүрийн үйл үг, жишээ, сайтын өөр нэрс
+scripts/demo.js    жинхэнэ сайтууд руу үг үгээр тоглуулах = эхнээсээ дуустал тест
+test/unit/         spans, snapshot шахалт, policy (Jev mock), controller (Jev + хөтөч mock)
+test/integration/  хуудасны fixture дээр 27 жинхэнэ API кейс, гүйцэтгэл + хоцролт хэвлэнэ
 ```
 
-## Tests and demo
+## Тест ба демо
 
 ```bash
-npm test                 # unit tests (no network)
-npm run test:integration # real Jev calls on fixtures; prints pass rate (expects ≥ 90%)
-npm run demo             # headed replay of 16 spoken commands against real sites, asserts URLs
-npm run demo:ci          # same, headless; exit code 1 on failure
+npm test                 # unit тестүүд (сүлжээгүй)
+npm run test:integration # fixture дээр жинхэнэ Jev дуудлага; гүйцэтгэл хэвлэнэ (≥ 90% хүлээнэ)
+npm run demo             # жинхэнэ сайт руу 16 хэлсэн командыг харагдах байдлаар тоглуулж, URL шалгана
+npm run demo:ci          # мөнөөх, headless; алдаа гарвал exit code 1
 node scripts/demo.js --headless --only 1,2,3 --word-ms 250
 ```
 
-Latest measured (Sep 2026, from this machine): integration 27/27 (100%), Jev latency avg ≈ 330 ms
-(p50 ≈ 300 ms, 3–6k input tokens per request; the first request of a process is ~700 ms for the
-TLS handshake), last-word→decision ≈ 300 ms including the 200 ms debounce, whole demo ≈ $0.01.
+Хамгийн сүүлд хэмжсэн (2026 оны 9 сар, энэ машинаас): integration 27/27 (100%), Jev-ийн хоцролт
+дундаж ≈ 330 мс (p50 ≈ 300 мс, хүсэлт бүрт 3–6 мянган оролтын токен; процессын эхний хүсэлт
+TLS handshake-ийн улмаас ~700 мс), сүүлийн үг → шийдвэр ≈ 300 мс (200 мс debounce орсон),
+бүтэн демо ≈ $0.01.
 
-## Notes and limitations
+## Тэмдэглэл ба хязгаарлалт
 
-- Web Speech API only in Chrome/Edge; it sends audio to Google. Interim results arrive in bursts, so
-  "acting before you finish" is most visible on longer sentences.
-- One action per utterance; extra words after an executed command are treated as a new command
-  only if there are at least two of them.
-- Element snapshot is capped at 100 items (viewport first) and 60 chars of text each — deep pages
-  need a scroll before "click …" finds below-fold items. Elements inside iframes are not seen.
-- Sites with heavy bot protection (Google consent, some search engines in headless mode) may not
-  render results; the demo uses Wikipedia, example.com, Hacker News and DuckDuckGo.
-- `select_option` matches the option label in code by substring; `switch_tab` cycles.
-- Confidence gates are calibrated on `jev-1.13.0`; re-check `T` if you move the model alias.
+- Web Speech API зөвхөн Chrome/Edge-д; аудиог Google руу илгээдэг. Завсрын үр дүн бөөнөөр
+  ирдэг тул "дуусахад нь ажиллах" нь урт өгүүлбэр дээр илүү тод харагдана.
+- Нэг амьсгалд нэг үйлдэл; ажилласан командын дараах нэмэлт үгс нь дор хаяж хоёр үг байвал
+  л шинэ команд болно.
+- Элементийн скан нь 100 зүйлээр (эхлээд дэлгэцэн дээрх) ба текст тус бүр 60 тэмдэгтээр
+  хязгаарлагдана — гүн хуудсан дээр "click …" гэж доош байгаа зүйлийг олохын тулд эхлээд
+  гүйлгэх хэрэгтэй. iframe доторх элементүүд харагдахгүй.
+- Хүчтэй bot хамгаалалттай сайтууд (Google-ийн зөвшөөрөл, headless горимд зарим хайлтын
+  систем) үр дүн гаргахгүй байж болно; демо нь Wikipedia, example.com, Hacker News,
+  DuckDuckGo-г ашигладаг.
+- `select_option` нь сонголтын шошгыг код дотор substring-аар тааруулна; `switch_tab` ээлжлэн
+  шилжинэ.
+- Итгэлийн босгууд `jev-1.13.0` дээр тохируулагдсан; моделийн alias-ыг сольбол `T`-г дахин
+  шалгаарай.
+
+---
+
+Энэ бол [moritzkremb/jev-voice-browser](https://github.com/moritzkremb/jev-voice-browser)-ийн
+монгол хэлний fork. Англи хувилбарыг [README.en.md](README.en.md)-аас үзнэ үү.
