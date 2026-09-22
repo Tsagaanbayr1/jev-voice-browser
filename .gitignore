@@ -6,3 +6,6 @@ node_modules/
 *.log
 test-results/
 .browser-profile*/
+
+# compiled macOS accessibility bridge
+bin/
