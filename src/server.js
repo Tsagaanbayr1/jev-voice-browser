@@ -133,6 +133,10 @@ export async function startServer(opts = {}) {
   controller.on("tabs", (p) => broadcast("tabs", p));
   controller.on("lang", (p) => broadcast("lang", p));
   controller.on("uiLang", (p) => broadcast("uiLang", p));
+  // Controller нь Jev-ийн алдааг `log`-оор аль хэдийн мэдэгддэг (тэр нь UI руу ч очно),
+  // харин Node-д сонсогчгүй `error` event нь шидэгддэг — тиймээс энэ listener нь нэг
+  // муу хүсэлт (жишээ нь хүчингүй Unicode) бүхэл серверийг унагахаас сэргийлнэ.
+  controller.on("error", (err) => console.error(`[jev] ${err?.message || err}`));
 
   wss.on("connection", (ws) => {
     ws.send(JSON.stringify({ type: "hello", payload: controller.uiState() }));

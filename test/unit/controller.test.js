@@ -331,3 +331,34 @@ test("хуудсын overlay-ууд интерфейсийн хэлээр зур
   assert.ok(!toast[1].includes("{") && !toast[1].includes("[object"), `unresolved: ${toast[1]}`);
   await c.close();
 });
+
+test("Jev-ийн алдаа нь log + `error` event болж гарна (сервер унагахгүй)", async () => {
+  // Бодит доголдол: Jev API хүчингүй Unicode-той хүсэлтийг 400-аар үгүйсгэдэг байсан.
+  // Controller алдааг `log`-оор мэдэгдээд `error` event emit хийдэг — Node-д сонсогчгүй
+  // `error` event нь шидэгддэг тул server.js заавал listener-тэй байх ёстой.
+  const browser = fakeBrowser();
+  const boom = Object.assign(new Error("Request contains invalid Unicode text."), { status: 400 });
+  const c = new Controller({
+    browser,
+    decideFn: async () => {
+      throw boom;
+    },
+    executeFn: async () => ({ ok: true, detail: "ok" }),
+  });
+  const seen = [];
+  c.on("error", (err) => seen.push(err)); // server.js яг үүнийг хийдэг
+
+  await c.start();
+  c.handleTranscript({ text: "go back", final: true, utteranceId: "e1" });
+  await sleep(DEBOUNCE_MS + 250);
+
+  assert.equal(seen.length, 1, "`error` event нэг удаа гарна");
+  assert.equal(seen[0], boom);
+  const errs = c.log.filter((e) => e.level === "error" && e.key === "log.jevError");
+  assert.equal(errs.length, 1, "алдаа UI-ийн лог руу ч очно");
+  assert.ok(errs[0].msg.includes("invalid Unicode"), `msg: ${errs[0].msg}`);
+  // Алдаа гарсан ч controller ажилласаар байна
+  assert.equal(c.uiState().stats.calls, 0);
+  assert.equal(c.uiState().log.some((e) => e.key === "log.ready"), true);
+  await c.close();
+});

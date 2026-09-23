@@ -1,5 +1,5 @@
-> English version. The main [README.md](README.md) is in Mongolian — this is the same document,
-> kept as the upstream English original.
+> English version. The main [README.md](README.md) is in Mongolian — this is the upstream English
+> original, so fork-specific additions to the Mongolian README do not appear here.
 
 # voice-browser — talk to a real browser, it acts before you finish the sentence
 

@@ -8,6 +8,7 @@ import { TypeSafeClient, choice, noul, score, APIUserAbortError } from "@typesaf
 import { MODEL, PRICE_PER_M_INPUT_TOKENS_USD, questionsForLang, MAX_TRANSCRIPT_CHARS, MAX_CONTEXT_ACTIONS } from "./constants.js";
 import { extractTextCandidates, extractUrlCandidates } from "./spans.js";
 import { DEFAULT_LANG, getLang } from "./lang.js";
+import { clip, clipEnd, sanitizeDeep, stripLoneSurrogates } from "./text.js";
 
 let _client = null;
 
@@ -67,18 +68,18 @@ export function encodeContext(context) {
   const out = {};
   if (context.previousPage?.url) {
     out.previous_page = {
-      url: String(context.previousPage.url).slice(0, 200),
-      title: String(context.previousPage.title || "").slice(0, 120),
+      url: clip(context.previousPage.url, 200),
+      title: clip(context.previousPage.title || "", 120),
     };
   }
   const actions = (context.recentActions || []).slice(-MAX_CONTEXT_ACTIONS).reverse();
   if (actions.length) {
     const now = Date.now();
     out.recent_actions = actions.map((a) => {
-      const e = { said: String(a.said || "").slice(0, 120), action: a.type };
-      if (a.targetLabel) e.target = String(a.targetLabel).slice(0, 80);
-      if (a.text) e.text = String(a.text).slice(0, 80);
-      if (a.url) e.url = String(a.url).slice(0, 200);
+      const e = { said: clip(a.said || "", 120), action: a.type };
+      if (a.targetLabel) e.target = clip(a.targetLabel, 80);
+      if (a.text) e.text = clip(a.text, 80);
+      if (a.url) e.url = clip(a.url, 200);
       e.outcome = a.outcome || (a.ok === false ? "failed" : "done");
       if (a.at) e.seconds_ago = Math.max(0, Math.round((now - a.at) / 1000));
       return e;
@@ -92,9 +93,14 @@ export function encodeContext(context) {
  * Jev яг юу харж байгааг тестүүд шалгаж чадахын тулд export хийсэн.
  */
 export function buildRequest({ transcript, snapshot, pendingConfirmation = null, tabs = null, context = null, lang = DEFAULT_LANG }) {
-  const text = String(transcript || "").slice(-MAX_TRANSCRIPT_CHARS);
-  const textCandidates = extractTextCandidates(text, lang);
-  const urlCandidates = extractUrlCandidates(text, lang);
+  // `clipEnd` нь сүүлийн 400 тэмдэгтийг суррогат хосыг хуваалгүй авна;
+  // `stripLoneSurrogates` нь recognizer-ээс шууд ирсэн ганц бие суррогатыг ч цэвэрлэнэ
+  // (text_span / url_span-ийн candidate-ууд энэ мөрөөс гаргаж авдаг тул энд цэвэрлэх ёстой).
+  const text = stripLoneSurrogates(clipEnd(String(transcript || ""), MAX_TRANSCRIPT_CHARS));
+  // Candidate-ууд `text_span` / `url_span`-ийн CRITERIA KEY болдог ба `sanitizeDeep`
+  // object-ийн VALUE-уудыг л цэвэрлэдэг тул тэдгээрийг энд тусдаа цэвэрлэнэ.
+  const textCandidates = extractTextCandidates(text, lang).map(stripLoneSurrogates);
+  const urlCandidates = extractUrlCandidates(text, lang).map(stripLoneSurrogates);
   const QUESTIONS = questionsForLang(lang);
   const pack = getLang(lang);
 
@@ -103,8 +109,8 @@ export function buildRequest({ transcript, snapshot, pendingConfirmation = null,
   const state = {
     transcript: text,
     page: {
-      url: (snapshot?.url || "about:blank").slice(0, 200),
-      title: (snapshot?.title || "").slice(0, 120),
+      url: clip(snapshot?.url || "about:blank", 200),
+      title: clip(snapshot?.title || "", 120),
       site: snapshot?.site || "blank",
     },
     // Element бүрт нэг compact мөр, харагдах дарааллаар (viewport эхэнд). `target` асуултын
@@ -148,6 +154,9 @@ export function buildRequest({ transcript, snapshot, pendingConfirmation = null,
     questions.url_span = choice(QUESTIONS.url_span.instructions, c);
   }
 
+  // Сүүлчийн баталгаа: state-д ганц бие суррогат үлдээгүй. Jev API ийм хүсэлтийг
+  // 400-аар үгүйсгэдэг ба Controller-ийн `error` event нь бүх серверийг унагадаг.
+  sanitizeDeep(state);
   return { state, questions, candidates: { text: textCandidates, url: urlCandidates } };
 }
 

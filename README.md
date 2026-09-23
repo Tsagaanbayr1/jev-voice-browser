@@ -195,6 +195,7 @@ cp .env.example .env          # TypeSafe API түлхүүрээ буулгана
 src/constants.js   MODEL pin, босгууд, асуулт бүрийн текст — камер дээр үзүүлэх ганц файл
 src/jev.js         төлөв + асуултуудыг бүтээж, @typesafe-ai/sdk-г дуудаж, хариулт/хоцролт/хэрэглээ/зардал буцаана
 src/spans.js       нэрэмжит хэсэг гаргаж авах (текстийн агуулга, хэлсэн URL, тооны үгс) — код, Jev биш
+src/text.js        юникод-аюулгүй таслалт: суррогат хосыг (emoji) дундуур нь хуваахгүй — хуваагдсан хагас нь хүчингүй Unicode бөгөөд Jev API бүх хүсэлтийг 400-аар үгүйсгэдэг
 src/snapshot.js    хуудас доторх элемент цуглуулагч (data-vb-id тавьдаг), шахах + хэмжээний хамгаалалт, сайт таних
 src/policy.js      хариултууд → act / wait / ignore / confirm / disambiguate, шалтгаантайгаа
 src/executor.js    Playwright үйлдлүүд + overlay-ийн хариу мэдэгдэл
@@ -205,7 +206,7 @@ src/server.js      Express + ws, src/public/index.html (удирдлагын х�
 src/public/        удирдлагын хуудас, микрофоны recorder, i18n хүснэгт
 src/lang.js        хэл тус бүрийн үйл үг, жишээ, сайтын өөр нэрс
 scripts/demo.js    жинхэнэ сайтууд руу үг үгээр тоглуулах = эхнээсээ дуустал тест
-test/unit/         spans, snapshot шахалт, policy (Jev mock), controller (Jev + хөтөч mock), context encode + засвар
+test/unit/         spans, snapshot шахалт, policy (Jev mock), controller (Jev + хөтөч mock), context encode + засвар, юникод-аюулгүй таслалт
 test/integration/  хуудасны fixture дээр 34 жинхэнэ API кейс (context / засвар орсон), гүйцэтгэл + хоцролт хэвлэнэ
 ```
 
@@ -241,6 +242,12 @@ node scripts/demo.js --headless --only 1,2,3 --word-ms 250
   шилжинэ.
 - Итгэлийн босгууд `jev-1.13.0` дээр тохируулагдсан; моделийн alias-ыг сольбол `T`-г дахин
   шалгаарай.
+- Jev-ийн хүсэлт бүтэлгүйтвэл (сүлжээ, түлхүүр, хязгаар) сервер унахгүй: алдаа нь
+  ҮЙЛДЛИЙН ЛОГ-т улаанаар гарч, операторын терминалд ч хэвлэгдэнэ. Хуудсан дээрх 120
+  тэмдэгтээс урт page title эсвэл 60 тэмдэгтээс урт element label нь тайрагддаг ба
+  таслалт нь emoji гэх мэт суррогат хосыг хэзээ ч дундуур нь хуваахгүй (`src/text.js`) —
+  хуваагдсан хагас нь хүчингүй Unicode болж, Jev API бүх хүсэлтийг
+  `400 Request contains invalid Unicode text.`-ээр үгүйсгэдэг байсан.
 
 ---
 

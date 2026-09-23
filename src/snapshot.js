@@ -7,6 +7,7 @@
  *    хийж, текстийг тайрч, нийт state-ийн хэмжээг Jev-ийн 32k-token хязгаараас хамаагүй доогуур байлгана.
  */
 import { MAX_ELEMENTS, MAX_ELEMENT_TEXT, MAX_STATE_CHARS } from "./constants.js";
+import { clip } from "./text.js";
 
 /** Браузер дотор ажиллана. Өөртөө бүрэн агуулагдсан байх ёстой (closure байхгүй). */
 export function collectElementsInPage() {
@@ -172,7 +173,9 @@ export function findSearchBox(elements) {
 
 function truncate(s, n) {
   s = String(s || "");
-  return s.length > n ? s.slice(0, n - 1).trimEnd() + "…" : s;
+  // `clip` нь суррогат хосыг (emoji) дундуур нь хуваахгүй — хуваагдсан хагас нь
+  // хүчингүй Unicode болж, Jev API бүх хүсэлтийг 400-аар үгүйсгэдэг.
+  return s.length > n ? clip(s, n - 1).trimEnd() + "…" : s;
 }
 
 /**
