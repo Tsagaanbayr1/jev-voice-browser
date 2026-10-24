@@ -43,6 +43,7 @@ export function collectElementsInPage() {
   const nodes = doc.querySelectorAll(SELECTOR);
 
   const clean = (s) => (s || "").replace(/\s+/g, " ").trim();
+  const seenIds = new Set();
 
   for (const el of nodes) {
     if (out.length >= 400) break;
@@ -58,11 +59,14 @@ export function collectElementsInPage() {
     if (el.getAttribute("aria-hidden") === "true") continue;
     if (typeof el.checkVisibility === "function" && !el.checkVisibility()) continue;
 
+    // Reuse our own earlier id so it stays stable across snapshots, but never a
+    // value the page wrote itself or one already used in this pass.
     let id = el.getAttribute("data-vb-id");
-    if (!id) {
+    if (!id || !/^e\d{2,}$/.test(id) || seenIds.has(id)) {
       id = "e" + String(win.__vbNextId++).padStart(2, "0");
       el.setAttribute("data-vb-id", id);
     }
+    seenIds.add(id);
 
     const tag = el.tagName.toLowerCase();
     const type = (el.getAttribute("type") || "").toLowerCase();
@@ -195,7 +199,12 @@ export function compactElements(rawElements, opts = {}) {
 
   const seen = new Set();
   const out = [];
-  for (const e of sorted) {
+  for (let e of sorted) {
+    // collectElementsInPage runs in the page's own JavaScript world, so the page
+    // can return anything. Only our id format goes on (it becomes a Jev criteria
+    // key and a CSS selector), and role is forced to a short string.
+    if (typeof e.id !== "string" || !/^e\d{2,}$/.test(e.id)) continue;
+    e = { ...e, role: String(e.role ?? "").slice(0, 40) };
     const isInput = ["textbox", "searchbox", "combobox", "select", "checkbox", "radio"].includes(e.role);
     const text = truncate(e.text || e.placeholder, maxText);
     if (!text && !isInput) continue;
