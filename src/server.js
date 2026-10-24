@@ -17,6 +17,7 @@ import { MODEL, questionsForLang, T } from "./constants.js";
 import { DEFAULT_LANG, LANGUAGES, isSupportedLang, getLang } from "./lang.js";
 import { transcribe, sttStatus, streamingStatus, streamSocketUrl, apiKey } from "./stt.js";
 import { resolveUiLang, UI_LANGUAGES } from "./public/i18n.js";
+import { isAllowedHost, isAllowedOrigin, parseAllowedHosts } from "./guard.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -54,11 +55,21 @@ export async function startServer(opts = {}) {
     process.exit(1);
   }
   const browser = new BrowserManager();
-  await browser.launch({ headless: opts.headless, cdp: opts.cdp, startUrl: opts.startUrl });
+  await browser.launch({ headless: opts.headless, cdp: opts.cdp, startUrl: opts.startUrl, profileDir: opts.profileDir });
   const controller = new Controller({ browser, lang: opts.lang, uiLang: opts.uiLang });
   await controller.start();
 
+  const allowedHosts = parseAllowedHosts(process.env.ALLOWED_HOSTS);
   const app = express();
+  // Before anything else: a request for another hostname is DNS rebinding, and a
+  // cross-site POST (e.g. a no-preflight upload to /api/transcribe) spends credits.
+  app.use((req, res, next) => {
+    if (!isAllowedHost(req.headers.host, allowedHosts)) return res.status(403).type("text/plain").send("unknown host");
+    if (req.method !== "GET" && req.method !== "HEAD" && !isAllowedOrigin(req.headers.origin, req.headers.host)) {
+      return res.status(403).type("text/plain").send("cross-origin request refused");
+    }
+    next();
+  });
   app.use(express.static(path.join(__dirname, "public")));
   app.get("/api/state", (_req, res) => res.json(controller.uiState()));
   app.get("/api/questions", (req, res) => {
@@ -102,6 +113,12 @@ export async function startServer(opts = {}) {
   const sttWss = new WebSocketServer({ noServer: true });
 
   server.on("upgrade", (req, socket, head) => {
+    // Browsers let any website open a WebSocket to localhost; only Origin says who
+    // asked. Without this check any page could drive the browser and read its pages.
+    if (!isAllowedHost(req.headers.host, allowedHosts) || !isAllowedOrigin(req.headers.origin, req.headers.host)) {
+      socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Length: 0\r\n\r\n");
+      return;
+    }
     let pathname;
     try {
       pathname = new URL(req.url, `http://${req.headers.host || "localhost"}`).pathname;
@@ -262,7 +279,7 @@ export async function startServer(opts = {}) {
 
   const host = opts.host || "127.0.0.1";
   await new Promise((resolve) => server.listen(opts.port, host, resolve));
-  const url = `http://localhost:${opts.port}`;
+  const url = `http://localhost:${server.address().port}`;
   if (host !== "127.0.0.1" && host !== "localhost") {
     console.warn(`WARNING: listening on ${host} — anyone who can reach this port can control the browser and spend API credits.`);
   }

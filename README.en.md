@@ -56,6 +56,10 @@ never sees it.
 
 **Security:** the server listens on `127.0.0.1` only. Anyone who can reach the control port can
 drive the browser and spend your API credits, so only use `--host 0.0.0.0` on a network you trust.
+Only this server's own control page may open its WebSockets or send it POSTs (other websites
+are refused by `Origin`), and it only answers to `localhost`, IP addresses, and hostnames you
+list in `ALLOWED_HOSTS` (comma-separated, e.g. `ALLOWED_HOSTS=mymac.local`), which blocks
+DNS rebinding. On a LAN, open it by IP or add the name you use to `ALLOWED_HOSTS`.
 The controlled Chromium uses a persistent profile in `.browser-profile/` (gitignored) — don't log
 into accounts there that you wouldn't want a mis-heard "click place order" to touch; destructive
 clicks require a spoken "confirm", but treat that as a convenience, not a guarantee.

@@ -207,7 +207,7 @@ let logEntries = []; // page-ийн өөрийн mirror, ингэснээр togg
 let lastTranscript = null;
 let pendingNotice = null;
 
-const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 /** Орчуулагдсан өгүүлбэрийн дотор тодрох ёстой утга. */
 const b = (v) => `<b>${esc(v)}</b>`;
 
@@ -354,7 +354,9 @@ function renderSnapshot() {
   if (sn.tabs) $("tabs").textContent = tabCount(sn.tabs.length);
   const rows = sn.elements.map((e) => {
     const cls = hotIds.has(e.id) ? " hot" : candIds.has(e.id) ? " cand" : "";
-    return `<div class="el${cls}"><span class="id">${e.id}</span><span class="role">${e.role}${e.below_fold ? " ↓" : ""}</span><span class="txt" title="${esc(e.href || "")}">${esc(e.text || e.placeholder || "")}</span></div>`;
+    // Every field here comes from the controlled page (role and data-vb-id are its own
+    // attributes), so all of it is escaped: this page can drive the browser.
+    return `<div class="el${cls}"><span class="id">${esc(e.id)}</span><span class="role">${esc(e.role)}${e.below_fold ? " ↓" : ""}</span><span class="txt" title="${esc(e.href || "")}">${esc(e.text || e.placeholder || "")}</span></div>`;
   });
   $("elements").innerHTML = rows.join("");
   const hot = $("elements").querySelector(".hot"); if (hot) hot.scrollIntoView({ block: "center" });
