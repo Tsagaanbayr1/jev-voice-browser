@@ -110,7 +110,9 @@ test("loopback names still reach the server", async () => {
 test("a visited page cannot run script in the control page", async () => {
   // The page controls every attribute the snapshot reads, including role and data-vb-id.
   await srv.browser.page.setContent(
-    `<button role="&lt;img src=x onerror=window.__pwnedRole=1&gt;">Go</button>` +
+    // Page-set ids first, so they are taken before the collector's counter reaches them.
+    `<button data-vb-id="e01">One</button><button data-vb-id="e01">Two</button>` +
+      `<button role="&lt;img src=x onerror=window.__pwnedRole=1&gt;">Go</button>` +
       `<a href="https://example.com/" data-vb-id="&lt;img src=y onerror=window.__pwnedId=1&gt;">Link</a>`,
     { waitUntil: "domcontentloaded" },
   );
@@ -120,7 +122,7 @@ test("a visited page cannot run script in the control page", async () => {
   try {
     const page = await viewer.newPage();
     await page.goto(`http://localhost:${port}/`);
-    await page.waitForFunction(() => document.querySelectorAll("#elements .el").length >= 2);
+    await page.waitForFunction(() => document.querySelectorAll("#elements .el").length >= 4);
     await page.waitForTimeout(500); // let a failed <img> fire onerror, if one was created
     const pwned = await page.evaluate(() => ({ role: window.__pwnedRole ?? null, id: window.__pwnedId ?? null }));
     assert.deepEqual(pwned, { role: null, id: null });
@@ -128,6 +130,7 @@ test("a visited page cannot run script in the control page", async () => {
     assert.match(text, /<img src=x onerror=window.__pwnedRole=1>/, "the hostile role is shown as text");
     const ids = await page.locator("#elements .id").allInnerTexts();
     assert.ok(ids.every((id) => /^e\d+$/.test(id)), `element ids come from the collector: ${ids}`);
+    assert.equal(new Set(ids).size, ids.length, `element ids are unique even when the page sets them: ${ids}`);
   } finally {
     await viewer.close();
   }

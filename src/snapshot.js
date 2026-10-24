@@ -63,7 +63,10 @@ export function collectElementsInPage() {
     // value the page wrote itself or one already used in this pass.
     let id = el.getAttribute("data-vb-id");
     if (!id || !/^e\d{2,}$/.test(id) || seenIds.has(id)) {
-      id = "e" + String(win.__vbNextId++).padStart(2, "0");
+      // The counter can trail ids the page set itself, so skip any already taken.
+      do {
+        id = "e" + String(win.__vbNextId++).padStart(2, "0");
+      } while (seenIds.has(id));
       el.setAttribute("data-vb-id", id);
     }
     seenIds.add(id);
@@ -204,7 +207,7 @@ export function compactElements(rawElements, opts = {}) {
     // can return anything. Only our id format goes on (it becomes a Jev criteria
     // key and a CSS selector), and role is forced to a short string.
     if (typeof e.id !== "string" || !/^e\d{2,}$/.test(e.id)) continue;
-    e = { ...e, role: String(e.role ?? "").slice(0, 40) };
+    e = { ...e, role: clip(String(e.role ?? ""), 40) };
     const isInput = ["textbox", "searchbox", "combobox", "select", "checkbox", "radio"].includes(e.role);
     const text = truncate(e.text || e.placeholder, maxText);
     if (!text && !isInput) continue;
